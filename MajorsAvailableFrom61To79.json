@@ -1,0 +1,496 @@
+{
+    "reports": [
+        {
+            "label": "East Asian Humanities, B.A. ",
+            "key": "75/61/to/79/Major/1f095d41-6782-4a0c-f3ea-08dcbe18dd4f",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Interdisciplinary Studies Field Major, B.A.",
+            "key": "75/61/to/79/Major/f027b21b-4997-404d-7e21-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Engineering Mathematics and Statistics, B.S.",
+            "key": "75/61/to/79/Major/c565822a-d8f7-4b68-7df2-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Ancient Greek and Roman Civilizations, B.A.",
+            "key": "75/61/to/79/Major/16b6ae4c-44fb-41f6-7df1-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "History, B.A.",
+            "key": "75/61/to/79/Major/3d7c5908-63be-4a8b-7df0-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Industrial Engineering & Operations Research, B.S.",
+            "key": "75/61/to/79/Major/b6531604-dc38-41ce-7def-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Analytics, B.A.",
+            "key": "75/61/to/79/Major/23d79a84-d16c-4b58-7dee-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Molecular and Cell Biology, B.A.",
+            "key": "75/61/to/79/Major/8e005d11-31ea-4729-7ded-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Legal Studies, B.A.",
+            "key": "75/61/to/79/Major/149a5959-f9ca-4e9c-7dec-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Mathematics/Applied Mathematics, B.A.",
+            "key": "75/61/to/79/Major/21a42370-69cd-4dea-7deb-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Nutrition & Metabolic Biology, B.S.",
+            "key": "75/61/to/79/Major/c638d40e-2865-4865-7dea-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Marine Science, B.A.",
+            "key": "75/61/to/79/Major/44ad59d7-ae81-421a-7de9-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Gender and Women's Studies, B.A.",
+            "key": "75/61/to/79/Major/8773e050-c519-4d21-7de8-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Conservation and Resource Studies, B.S.",
+            "key": "75/61/to/79/Major/7039219b-2f2c-475d-7de7-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Microbial Biology, B.S.",
+            "key": "75/61/to/79/Major/b7d9ccee-62fe-42b0-7de5-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Political Economy, B.A.",
+            "key": "75/61/to/79/Major/f2287ac6-d1db-4f56-7de4-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Electrical Engineering & Computer Sciences, B.S.",
+            "key": "75/61/to/79/Major/4e69eaf9-4598-4a2d-7de3-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Greek and Latin, B.A.",
+            "key": "75/61/to/79/Major/b2cab5f4-214b-45ff-7de2-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Dutch Studies, B.A.",
+            "key": "75/61/to/79/Major/baf619fd-dab9-476e-7de0-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Greek, B.A.",
+            "key": "75/61/to/79/Major/879f29d5-a2f4-4fbf-7ddf-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Latin, B.A.",
+            "key": "75/61/to/79/Major/b4a0af77-3e4a-478b-7ddd-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Physics, B.A.",
+            "key": "75/61/to/79/Major/6419da5a-b4fd-4922-7ddb-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Landscape Architecture, B.A.",
+            "key": "75/61/to/79/Major/dfdf76fa-614b-4f5a-7ddc-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Slavic Languages and Literatures, B.A.",
+            "key": "75/61/to/79/Major/d600a62d-4343-49be-7e16-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "French, B.A.",
+            "key": "75/61/to/79/Major/f25a998f-8e94-4e17-7e14-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Cognitive Science, B.A.",
+            "key": "75/61/to/79/Major/2622feca-d151-4126-7e15-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Mechanical Engineering, B.S.",
+            "key": "75/61/to/79/Major/40672ea3-4026-4b02-7e13-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Society and Environment, B.S",
+            "key": "75/61/to/79/Major/71805c1e-b7bd-4778-7e11-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Celtic Studies, B.A.",
+            "key": "75/61/to/79/Major/dedeb6d1-ad9d-4aaa-7e10-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Japanese (East Asian Languages), B.A.",
+            "key": "75/61/to/79/Major/ac65cf12-f522-4f63-7e0e-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Planetary Science, B.A.",
+            "key": "75/61/to/79/Major/ce36f92e-466f-45c9-7e0d-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Environmental Sciences, B.S.",
+            "key": "75/61/to/79/Major/718686de-28b0-479c-7e0c-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Data Science, B.A.",
+            "key": "75/61/to/79/Major/648bdbf3-f87d-4a4e-7e0b-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Political Science, B.A.",
+            "key": "75/61/to/79/Major/8deeac13-9a78-416a-7e0a-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Energy Engineering, B.S.",
+            "key": "75/61/to/79/Major/a595de37-063d-480b-7dff-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Media Studies, B.A.",
+            "key": "75/61/to/79/Major/b90d8154-46b1-4a41-7dfe-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Art (Practice of), B.A.",
+            "key": "75/61/to/79/Major/e6d1117c-e0c1-4f30-7dfd-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "German, B.A.",
+            "key": "75/61/to/79/Major/d878d567-fbd0-4db1-7dfc-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "East Asian Religion, Thought, and Culture, B.A.",
+            "key": "75/61/to/79/Major/fd6afb3f-e9f0-47ed-7dfb-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Atmospheric Science, B.A.",
+            "key": "75/61/to/79/Major/06448790-712e-4a6b-7df8-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Genetics and Plant Biology, B.S.",
+            "key": "75/61/to/79/Major/85f168aa-64ad-4c0d-7df6-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Sustainable Environmental Design, B.A.",
+            "key": "75/61/to/79/Major/50708f27-6e76-4241-7df5-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Sociology, B.A.",
+            "key": "75/61/to/79/Major/28ff3e90-af62-45e6-7df4-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Environmental Economics and Policy, B.S.",
+            "key": "75/61/to/79/Major/0f0916d9-6e23-43c3-7dda-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Bioengineering, B.S.",
+            "key": "75/61/to/79/Major/6aa699eb-f0a5-4104-7dd8-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Social Welfare, B.A.",
+            "key": "75/61/to/79/Major/59bf23ce-77d0-4348-7dd7-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Computer Science, B.A.",
+            "key": "75/61/to/79/Major/fc50cced-05c2-43c7-7dd5-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Public Health, B.A.",
+            "key": "75/61/to/79/Major/8a21aae4-e79f-43fd-7dd3-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Scandinavian, B.A.",
+            "key": "75/61/to/79/Major/6919db4e-074a-4210-7dd2-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Nuclear Engineering, B.S.",
+            "key": "75/61/to/79/Major/00c16657-a8a1-4f3a-7dd1-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Geophysics, B.A.",
+            "key": "75/61/to/79/Major/0d6448dc-17ef-4008-7dcf-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Asian American and Asian Diaspora Studies, B.A.",
+            "key": "75/61/to/79/Major/8fd9d22a-9cd6-40ce-7e20-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Ecosystem Management & Forestry, B.S.",
+            "key": "75/61/to/79/Major/9a758a2c-39ad-4daa-7e1f-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Educational Sciences, B.S.",
+            "key": "75/61/to/79/Major/7a9b072e-d877-43ac-7e1c-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Astrophysics, B.A.",
+            "key": "75/61/to/79/Major/fe84f224-b241-4fd1-7e1b-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Spanish and Portuguese, B.A.",
+            "key": "75/61/to/79/Major/5e65afb3-3479-494a-7e1a-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "English, B.A.",
+            "key": "75/61/to/79/Major/8d3cbeaa-a3b5-4234-7e19-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "History of Art, B.A.",
+            "key": "75/61/to/79/Major/59505c38-f167-4410-7e17-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Materials Science and Engineering, B.S.",
+            "key": "75/61/to/79/Major/ef7258b6-ab59-46e7-7dcd-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Film & Media, B.A.",
+            "key": "75/61/to/79/Major/dfdc14c5-8505-4d1c-7dcc-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Rhetoric, B.A.",
+            "key": "75/61/to/79/Major/53765f73-96bc-411e-7dcb-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Business Administration, B.S.",
+            "key": "75/61/to/79/Major/019e1bbf-5868-45f0-7dca-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Anthropology, B.A.",
+            "key": "75/61/to/79/Major/724073d4-631c-4141-7dc9-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Environmental Engineering Science, B.S.",
+            "key": "75/61/to/79/Major/ee459941-5371-45a6-7dc8-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Native American Studies, B.A.",
+            "key": "75/61/to/79/Major/c94d4a84-7e0b-48ed-7dc7-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Comparative Literature, B.A.",
+            "key": "75/61/to/79/Major/48125d62-3930-486c-7dc6-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Dance and Performance Studies, B.A.",
+            "key": "75/61/to/79/Major/2a7854b0-5b58-4cfa-7dc5-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Geology, B.A.",
+            "key": "75/61/to/79/Major/4748bed6-fa77-41b9-7dc4-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Global Studies, B.A.",
+            "key": "75/61/to/79/Major/5175247a-fea4-4325-7dc3-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Molecular Environmental Biology, B.S.",
+            "key": "75/61/to/79/Major/c44e316c-af88-4eb8-7dc2-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Italian Studies, B.A.",
+            "key": "75/61/to/79/Major/cc8b603d-8054-4db5-7dc1-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Middle Eastern Languages and Cultures, B.A. ",
+            "key": "75/61/to/79/Major/98f01679-2e4b-4c03-7df7-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "South and Southeast Asian Studies, B.A.",
+            "key": "75/61/to/79/Major/fdb64532-dc13-4589-7e09-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Environmental Earth Science, B.A.",
+            "key": "75/61/to/79/Major/b718843f-6136-4e90-7e08-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Architecture, B.A.",
+            "key": "75/61/to/79/Major/f5e1321a-d630-4b36-7e07-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Music, B.A.",
+            "key": "75/61/to/79/Major/3e80d556-813d-4e09-7e06-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Civil Engineering, B.S.",
+            "key": "75/61/to/79/Major/ae8ff46c-7d25-4372-7e05-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Philosophy, B.A.",
+            "key": "75/61/to/79/Major/6100d6a4-cb8a-45d8-7e03-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Theater and Performance Studies, B.A.",
+            "key": "75/61/to/79/Major/6350dff4-adde-4f60-7e02-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Chinese (East Asian Languages), B.A.",
+            "key": "75/61/to/79/Major/b90fdec3-7d16-4fb7-7e01-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Engineering Physics, B.S.",
+            "key": "75/61/to/79/Major/3600bdbe-e56c-4bb8-7e00-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Statistics, B.A.",
+            "key": "75/61/to/79/Major/437ff82d-2efa-47b0-7e18-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Geography, B.A.",
+            "key": "75/61/to/79/Major/a4dc4074-e734-402b-7e04-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Chemical Biology, B.S.",
+            "key": "75/61/to/79/Major/1c4ecce8-900b-4549-7df9-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Chemical Engineering, B.S.",
+            "key": "75/61/to/79/Major/f436aab7-209d-4c77-7dfa-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Chemistry, B.A. and B.S.",
+            "key": "75/61/to/79/Major/24df6cc0-c972-4b73-7dd6-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Ethnic Studies, B.A.",
+            "key": "75/61/to/79/Major/076c800d-8309-4d4a-7de6-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Urban Studies, B.A.",
+            "key": "75/61/to/79/Major/0240e510-18a8-439c-7e1e-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Chicanx Latinx Studies, B.A.",
+            "key": "75/61/to/79/Major/2f3496e0-0a6d-410f-7dd4-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "American Studies, B.A.",
+            "key": "75/61/to/79/Major/a508154f-31aa-4b25-7dd9-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Integrative Biology, B.A.",
+            "key": "75/61/to/79/Major/01d6a542-7525-4316-7dce-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Neuroscience, B.A. ",
+            "key": "75/61/to/79/Major/1dad21b7-f09e-48fa-cbe3-08dd13bf79d5",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Psychology, B.A.",
+            "key": "75/61/to/79/Major/126a4237-be80-4092-7dde-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Economics, B.A.",
+            "key": "75/61/to/79/Major/d26ef3fe-0350-4b47-7dd0-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "African American Studies, B.A.",
+            "key": "75/61/to/79/Major/2f47f052-ef8f-4296-7df3-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Linguistics, B.A.",
+            "key": "75/61/to/79/Major/df5217f4-e788-4eb7-7e12-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        },
+        {
+            "label": "Aerospace Engineering, B.S.",
+            "key": "75/61/to/79/Major/607b828c-8ba3-411b-7de1-08dcb87d5deb",
+            "ownerInstitutionId": 79
+        }
+    ],
+    "allReports": [
+        {
+            "label": "All Majors",
+            "key": "75/61/to/79/AllMajors",
+            "ownerInstitutionId": 79
+        }
+    ]
+}
