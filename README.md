@@ -25,15 +25,6 @@
 
 ---
 
-## 🛠️ Tech Stack
-
-- Python 3
-- [`fpdf`](https://py-pdf.github.io/fpdf2/) for PDF generation
-- (Planned) Web scraping or API integration with [ASSIST.org](https://assist.org) for real-time articulation data
-- OpenAI API or custom LLM-based agent for AI counselor (in development)
-
----
-
 ## 📥 Getting Started
 
 ```bash
