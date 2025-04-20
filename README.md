@@ -77,7 +77,7 @@ Contributions are welcome! Open an issue to discuss your idea or submit a pull r
 
 ## 📬 Contact
 
-Made with ❤️ by [Ahmon Embaye]
+Made by [Ahmon Embaye]
 
 For questions or support, reach out at [ahmonembaye@example.com] or via GitHub Issues.
 
