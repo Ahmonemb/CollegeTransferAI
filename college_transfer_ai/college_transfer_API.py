@@ -2,6 +2,7 @@ import requests
 from playwright.sync_api import sync_playwright
 from pymongo import MongoClient
 import gridfs
+import json
 
 class CollegeTransferAPI:
     def __init__(self):
@@ -93,7 +94,7 @@ class CollegeTransferAPI:
         
         return majors_dict
 
-    def get_major_key(self, sending_institution_id, receiving_institution_id, academic_year_id, major, category_code="major"):
+    def get_major_from_key(self, key):
         # Define the parameters
         # sending_institution_id = 61
         # receiving_institution_id = 79
@@ -102,7 +103,13 @@ class CollegeTransferAPI:
         
         # Define the API endpoint and parameters
 
-        url = f"https://assist.org/api/agreements?receivingInstitutionId={receiving_institution_id}&sendingInstitutionId={sending_institution_id}&academicYearId={academic_year_id}&categoryCode={category_code}"
+        keyArray = key.split("/")
+    
+        sending_institution_id = int(keyArray[1])
+        receiving_institution_id = int(keyArray[3])
+        academic_year_id = int(keyArray[0])
+
+        url = f"https://assist.org/api/agreements?receivingInstitutionId={receiving_institution_id}&sendingInstitutionId={sending_institution_id}&academicYearId={academic_year_id}&categoryCode=major"
 
         result = requests.get(url)
 
@@ -118,12 +125,12 @@ class CollegeTransferAPI:
         for _, c in result_json.items():
             for i in c:
                 for l, j in i.items():
-                    if l == "label" and j == major:
-                        return i["key"]
+                    if l == "key" and j == key:
+                        return i["label"].replace(" ", "_")
         
-        return "Major Not Found", major
+        return "Key Not Found", key
 
-    def get_colleges(self):
+    def get_sending_institutions(self):
 
         url = "https://assist.org/api/institutions"
 
@@ -145,8 +152,8 @@ class CollegeTransferAPI:
         
         return result_dict_colleges
 
-    def get_non_ccs(self):
-        url = "https://assist.org/api/institutions"
+    def get_receiving_institutions(self, receiving_institution_id):
+        url = f"https://assist.org/api/institutions/{receiving_institution_id}/agreements"
 
         result = requests.get(url)
 
@@ -161,9 +168,7 @@ class CollegeTransferAPI:
             print("Something went wrong when getting colleges")
             
         for institution in result_json:
-            if not institution["isCommunityCollege"]:
-                for name in institution["names"]:
-                    result_dict_non_ccs[name["name"]] = institution["id"]
+            result_dict_non_ccs[institution["institutionName"]] = institution["institutionParentId"]
         
         return result_dict_non_ccs
     
@@ -172,6 +177,7 @@ class CollegeTransferAPI:
         filename = (
             f"{self.get_college_from_id(sending_institution_id)}_to_"
             f"{self.get_college_from_id(receiving_institution_id)}_"
+            f"{self.get_major_from_key(major_key)}_"
             f"{self.get_year_from_id(academic_year_id)}.pdf"
         )
 
@@ -209,6 +215,4 @@ class CollegeTransferAPI:
 
 api = CollegeTransferAPI()
 
-# api.get_articulation_agreement(75,114,120,"75%2F114%2Fto%2F120%2FMajor%2F973390e6-330e-476a-a63e-08dc9aca4bac")
-
-# api.get_year_from_id(75)
+# print(json.dumps(api.get_major_from_key("75/125/to/1/Major/d5469a2c-be7e-452b-b492-08dca4e7496b"), indent=4))
