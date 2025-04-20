@@ -20,19 +20,23 @@ def home():
     return render_template('index.html')
 
 # Endpoint to get all institutions
+
 @app.route('/institutions', methods=['GET'])
 def get_institutions():
     try:
-        institutions = api.get_colleges()  # Fetch institutions from your API logic
+        institutions = api.get_sending_institutions()  # Fetch institutions from your API logic
         return jsonify(institutions)  # Return the institutions as JSON
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 # Endpoint to get all non community colleges
-@app.route('/nonccs', methods=['GET'])
-def get_non_ccs():
+@app.route('/receiving-institutions', methods=['GET'])
+def get_receiving_institutions():
+    
+    sending_institution_id = request.args.get('sendingInstitutionId')
+    
     try:
-        non_ccs = api.get_non_ccs()  # Fetch institutions from your API logic
+        non_ccs = api.get_receiving_institutions(sending_institution_id)  # Fetch institutions from your API logic
         return jsonify(non_ccs)  # Return the institutions as JSON
     except Exception as e:
         return jsonify({"error": str(e)}), 500

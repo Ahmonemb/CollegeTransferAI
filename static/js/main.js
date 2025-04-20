@@ -1,7 +1,7 @@
 const backendUrl = "http://127.0.0.1:5000";
 
 let institutionsDict = {};
-let nonCCS = {};
+let receivingInstitutions = {};
 let academicYears = {};
 let majors = {};
 let agreementGenerated = false;
@@ -75,6 +75,7 @@ function filterDropdown(inputId, dropdownId, dataObj, dataAttr) {
                 if (inputId === "searchInstitution") {
                     const receivingInput = document.getElementById("receivingInstitution");
                     if (receivingInput) receivingInput.disabled = false;
+                    filterInstitutions();
                 }
 
                 // Reset majors input if any dependency changes
@@ -117,6 +118,10 @@ function filterInstitutions() {
     const receivingInput = document.getElementById("receivingInstitution");
     if (sendingInput && receivingInput) {
         if (sendingInput.getAttribute("data-sending-institution-id")) {
+            populateData(
+                `receiving-institutions?sendingInstitutionId=${sendingInput.getAttribute("data-sending-institution-id")}`,
+                receivingInstitutions
+            );
             receivingInput.disabled = false;
         } else {
             receivingInput.disabled = true;
@@ -125,8 +130,8 @@ function filterInstitutions() {
     updateMajorsInputState();
 }
 
-function filterNonCCs() {
-    filterDropdown("receivingInstitution", "receivingInstitutionDropdown", nonCCS, "data-receiving-institution-id");
+function filterReceivingInstitutions() {
+    filterDropdown("receivingInstitution", "receivingInstitutionDropdown", receivingInstitutions, "data-receiving-institution-id");
     updateMajorsInputState();
 }
 
@@ -278,7 +283,6 @@ function showLoadingAgreement() {
 
 window.onload = function () {
     populateData('institutions', institutionsDict);
-    populateData('nonccs', nonCCS);
     populateData('academic-years', academicYears);
 };
 
