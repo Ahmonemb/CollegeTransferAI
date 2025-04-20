@@ -23,7 +23,7 @@ def test_get_institutions(client):
     assert isinstance(data, (dict))  
 
 def test_get_nonccs(client):
-    response = client.get('/nonccs')
+    response = client.get('/receiving-institutions')
     assert response.status_code == 200
     data = response.get_json()
     assert isinstance(data, (dict))
