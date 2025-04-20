@@ -17,7 +17,7 @@ api = CollegeTransferAPI()  # Create an instance of the CollegeTransferAPI class
 
 @app.route('/')
 def home():
-    return render_template('index.html')
+    return "College Transfer AI API is running."
 
 # Endpoint to get all institutions
 
