@@ -1,0 +1,8 @@
+Flask
+flask-cors
+requests
+pymongo
+gridfs
+playwright
+jinja2
+pytest

@@ -99,9 +99,7 @@ class CollegeTransferAPI:
         # receiving_institution_id = 79
         # academic_year_id = 75
         # category_code = "major"
-
         
-
         # Define the API endpoint and parameters
 
         url = f"https://assist.org/api/agreements?receivingInstitutionId={receiving_institution_id}&sendingInstitutionId={sending_institution_id}&academicYearId={academic_year_id}&categoryCode={category_code}"
@@ -116,7 +114,6 @@ class CollegeTransferAPI:
             result_json = json_data
         except ValueError:
             print("Request failed")
-        
         
         for _, c in result_json.items():
             for i in c:
@@ -195,7 +192,6 @@ class CollegeTransferAPI:
             f"&viewBy=major&viewSendingAgreements=false&viewByKey={major_key}"
         )
 
-        from playwright.sync_api import sync_playwright
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
             page = browser.new_page()
