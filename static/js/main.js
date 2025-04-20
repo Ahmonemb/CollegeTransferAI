@@ -4,6 +4,7 @@ let institutionsDict = {};
 let nonCCS = {};
 let academicYears = {};
 let majors = {};
+let agreementGenerated = false;
 
 async function populateData(endpoint, targetObj) {
     try {
@@ -61,6 +62,10 @@ function filterDropdown(inputId, dropdownId, dataObj, dataAttr) {
             option.textContent = name;
             option.className = "dropdown-item";
             option.onmousedown = function () {
+                if (agreementGenerated) {
+                    resetAllFields();
+                    return; // Optionally, prevent further actions until user re-selects
+                }
                 const input = document.getElementById(inputId);
                 input.value = name;
                 input.setAttribute(dataAttr, id.toString());
@@ -230,12 +235,13 @@ function allDependenciesSelected() {
 async function getArticulationAgreement(changedField) {
     const majorsInput = document.getElementById("majors");
     const key  = majorsInput.getAttribute("data-major-key");
-    console.log(key)
     if (!key) {
         alert("No Agreement Found");
         return;
     }
     
+    showLoadingAgreement();
+
     try {
         const response = await fetch(`${backendUrl}/articulation-agreement?key=${key}`);
         const data = await response.json();
@@ -265,6 +271,11 @@ async function getArticulationAgreement(changedField) {
     }
 }
 
+function showLoadingAgreement() {
+    const resultContent = document.getElementById("resultContent");
+    resultContent.textContent = "Loading Agreement...";
+}
+
 window.onload = function () {
     populateData('institutions', institutionsDict);
     populateData('nonccs', nonCCS);
@@ -274,7 +285,26 @@ window.onload = function () {
 
 function displayResult(data) {
     const resultContent = document.getElementById("resultContent");
-    if (resultContent) {
+    if (data.pdf_filename) {
+        window.open(`/pdf/${data.pdf_filename}`, '_blank');
+        resultContent.textContent = "PDF opened in a new tab.";
+        agreementGenerated = true; // Set flag
+        resetAllFields(); // Reset fields right after generating agreement
+    } else {
         resultContent.textContent = JSON.stringify(data, null, 4);
     }
+}
+
+function resetAllFields() {
+    document.getElementById("searchInstitution").value = "";
+    document.getElementById("searchInstitution").removeAttribute("data-sending-institution-id");
+    document.getElementById("receivingInstitution").value = "";
+    document.getElementById("receivingInstitution").removeAttribute("data-receiving-institution-id");
+    document.getElementById("receivingInstitution").disabled = true;
+    document.getElementById("academicYears").value = "";
+    document.getElementById("academicYears").removeAttribute("data-academic-year-id");
+    document.getElementById("majors").value = "";
+    document.getElementById("majors").removeAttribute("data-major-key");
+    agreementGenerated = false;
+    updateMajorsInputState();
 }

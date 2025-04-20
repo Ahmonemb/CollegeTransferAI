@@ -1,6 +1,7 @@
 import requests
-import json  
-from collections import defaultdict
+from playwright.sync_api import sync_playwright
+from pymongo import MongoClient
+import gridfs
 
 class CollegeTransferAPI:
     def __init__(self):
@@ -43,9 +44,25 @@ class CollegeTransferAPI:
         
         for k,v in institutions_dict.items():
             if k == str(id):
-                return v['names'][0]['name']      
+                return v['names'][0]['name'].replace(" ", "_")      
+    
+    def get_year_from_id(self, id):
+        url = "https://assist.org/api/AcademicYears"
 
+        result = requests.get(url)
+        result_json = {}
+        try:
+            json_data = result.json()
+            result_json = json_data
+        except ValueError:
+            print("Request failed")
+        
 
+        for k in result_json:
+            for idx, value in k.items():
+                if idx == "Id" and value == id:
+                    return str(k["FallYear"]) + "-" + str(k["FallYear"] + 1)
+                
     def get_all_majors(self, sending_institution_id, receiving_institution_id, academic_year_id, category_code="major"):
         # Define the parameters
         # sending_institution_id = 61
@@ -109,7 +126,6 @@ class CollegeTransferAPI:
         
         return "Major Not Found", major
 
-
     def get_colleges(self):
 
         url = "https://assist.org/api/institutions"
@@ -155,129 +171,48 @@ class CollegeTransferAPI:
         return result_dict_non_ccs
     
     
-    
-    def get_articulation_agreement(self, key):
+    def get_articulation_agreement(self, academic_year_id, sending_institution_id, receiving_institution_id, major_key):
+        filename = (
+            f"{self.get_college_from_id(sending_institution_id)}_to_"
+            f"{self.get_college_from_id(receiving_institution_id)}_"
+            f"{self.get_year_from_id(academic_year_id)}.pdf"
+        )
+
+        client = MongoClient("mongodb+srv://ahmonembaye:WCpjfEgNcIomkBcN@collegetransferaicluste.vlsybad.mongodb.net/?retryWrites=true&w=majority&appName=CollegeTransferAICluster")
+        db = client["CollegeTransferAICluster"]
+        fs = gridfs.GridFS(db)
+
+        # Check if file already exists
+        if fs.find_one({"filename": filename}):
+            client.close()
+            return filename
+
+        url = (
+            f"https://assist.org/transfer/results?year={academic_year_id}"
+            f"&institution={sending_institution_id}"
+            f"&agreement={receiving_institution_id}"
+            f"&agreementType=to&viewAgreementsOptions=true&view=agreement"
+            f"&viewBy=major&viewSendingAgreements=false&viewByKey={major_key}"
+        )
+
+        from playwright.sync_api import sync_playwright
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page()
+            page.goto(url, wait_until="networkidle")
+            pdf_bytes = page.pdf(format="A4")  # Get PDF as bytes
+            browser.close()
+
+        fs.put(pdf_bytes, filename=filename)
+        client.close()
+
+        return filename
         
-        def combine_keys_by_value_content(mapping):
-            from collections import defaultdict
-
-            # Helper: Remove key names from their own value lists
-            def clean_value(key, value_list):
-                return [v for v in value_list if key not in v]
-
-            grouped = defaultdict(list)
-            cleaned_values = {}
-
-            for key, value in mapping.items():
-                if value == ["No Course Articulated"]:
-                    # Don't group these, keep as is
-                    grouped[(key,)].append(key)
-                    cleaned_values[key] = value
-                else:
-                    # Remove key name from value list for grouping
-                    cleaned = tuple(sorted(set(clean_value(key, value))))
-                    grouped[cleaned].append(key)
-                    cleaned_values[key] = clean_value(key, value)
-
-            result = {}
-            for value_tuple, keys in grouped.items():
-                # Only combine if "And" is in the value list
-                if "And" in value_tuple and len(keys) > 1:
-                    # Remove "And" from the value list
-                    filtered_value = [v for v in value_tuple if v != "And"]
-                    result[", ".join(sorted(keys))] = filtered_value
-                elif len(keys) == 1 and cleaned_values[keys[0]] == ["No Course Articulated"]:
-                    result[keys[0]] = ["No Course Articulated"]
-                else:
-                    # Do not combine, keep separate
-                    for k in keys:
-                        result[k] = list(value_tuple)
-            return result
-        
-        
-        url = "https://assist.org/api/articulation/Agreements?Key=" + key
-        result = requests.get(url)
-        result_json = {}
-        try:
-            json_data = result.json()
-            result_json = json_data
-        except ValueError:
-            print("Response is not in JSON format")
-            return {}
-
-        articulations = json.loads(result_json["result"]["articulations"])
-        templateAssets = json.loads(result_json["result"]["templateAssets"])
-
-        # Build a lookup for articulations by receiving course (prefix, number, title)
-        articulation_lookup = {}
-        for item in articulations:
-            if "series" in item["articulation"]:
-                item_series = item["articulation"]["series"]
-                for serie in item_series:
-                    if serie == "courses":
-                        item_courses = item_series["courses"]
-                        for item_course in item_courses:
-                            key_str = f"{item_course['prefix']} {item_course['courseNumber']} {item_course['courseTitle']}"
-                            articulation_lookup[key_str] = item
-            else:
-                item_course = item["articulation"]["course"]
-                key_str = f"{item_course['prefix']} {item_course['courseNumber']} {item_course['courseTitle']}"
-                articulation_lookup[key_str] = item
-
-        # Now map each receiving course to sending courses or "No Course Articulated"
-        mapping = {}
-        for asset in templateAssets:
-            if "sections" in asset:
-                for section in asset["sections"]:
-                    for row in section["rows"]:
-                        for cell in row["cells"]:
-                            if "course" in cell:
-                                course = cell["course"]
-                                course_key = f"{course['prefix']} {course['courseNumber']} {course['courseTitle']}"
-                                # Default to No Course Articulated
-                                mapping[course_key] = ["No Course Articulated"]
-                                # If articulation exists, map to sending courses
-                                if course_key in articulation_lookup:
-                                    articulation = articulation_lookup[course_key]
-                                    sending = articulation["articulation"]["sendingArticulation"]
-                                    if sending.get("items") and len(sending["items"]) > 0:
-                                        mapped = []
-                                        for group in sending["items"]:
-                                            for send_course in group.get("items", []):
-                                                mapped.append(send_course.get("courseTitle", "Unknown Course"))
-                                        if mapped:
-                                            mapping[course_key] = mapped
-                                    elif sending.get("noArticulationReason"):
-                                        mapping[course_key] = [sending["noArticulationReason"]]
-                            if "series" in cell:
-                                serie = cell["series"]
-                                if "courses" in serie:
-                                    for item_course in serie["courses"]:
-                                        course_key = f"{item_course['prefix']} {item_course['courseNumber']} {item_course['courseTitle']}"
-                                        # Default to No Course Articulated
-                                        mapping[course_key] = ["No Course Articulated"]
-                                        # If articulation exists, map to sending courses
-                                        if course_key in articulation_lookup:
-                                            articulation = articulation_lookup[course_key]
-                                            sending = articulation["articulation"]["sendingArticulation"]
-                                            if sending.get("items") and len(sending["items"]) > 0:
-                                                mapped = []
-                                                for group in sending["items"]:
-                                                    for send_course in group.get("items", []):
-                                                        mapped.append(send_course.get("courseTitle", "Unknown Course"))
-                                                if mapped:
-                                                    mapping[course_key] = mapped
-                                                    mapping[course_key].append(serie["conjunction"])
-                                            elif sending.get("noArticulationReason"):
-                                                mapping[course_key] = [sending["noArticulationReason"]]
-        
-        
-        return combine_keys_by_value_content(mapping)
 
 
 
 api = CollegeTransferAPI()
 
-# print(json.dumps(api.get_articulation_agreement("75/61/to/79/Major/fc50cced-05c2-43c7-7dd5-08dcb87d5deb"), indent=4))
+# api.get_articulation_agreement(75,114,120,"75%2F114%2Fto%2F120%2FMajor%2F973390e6-330e-476a-a63e-08dc9aca4bac")
 
-print(json.dumps(api.get_articulation_agreement("75/61/to/89/Major/eba1f42b-c560-46e6-1352-08dcbcdb53de"), indent=4))
+# api.get_year_from_id(75)

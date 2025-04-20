@@ -1,8 +1,10 @@
 import os
-from flask import Flask, jsonify, request, render_template
+from flask import Flask, jsonify, request, render_template, send_from_directory, Response
 from flask_cors import CORS
 from college_transfer_ai.college_transfer_API import CollegeTransferAPI
 import json
+import gridfs
+from pymongo import MongoClient
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 app = Flask(
@@ -63,15 +65,31 @@ def get_all_majors():
 # Endpoint to get articulation agreements
 @app.route('/articulation-agreement', methods=['GET'])
 def get_articulation_agreement():
-    key = request.args.get('key')
+    key = request.args.get("key")
     
-    print(key)
+    keyArray = request.args.get("key").split("/")
     
+    sending_institution_id = int(keyArray[1])
+    receiving_institution_id = int(keyArray[3])
+    academic_year_id = int(keyArray[0])
+
     try:
-        articulation = api.get_articulation_agreement(key)
-        return jsonify(articulation)
+        pdf_filename = api.get_articulation_agreement(academic_year_id, sending_institution_id, receiving_institution_id, key)
+        return jsonify({"pdf_filename": pdf_filename})  
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+    
+
+# Endpoint to get articulation agreement PDF
+@app.route('/pdf/<filename>')
+def serve_pdf(filename):
+    client = MongoClient("mongodb+srv://ahmonembaye:WCpjfEgNcIomkBcN@collegetransferaicluste.vlsybad.mongodb.net/?retryWrites=true&w=majority&appName=CollegeTransferAICluster")
+    db = client["CollegeTransferAICluster"]
+    fs = gridfs.GridFS(db)
+    file = fs.find_one({"filename": filename})
+    if not file:
+        return "PDF not found", 404
+    return Response(file.read(), mimetype='application/pdf')
 
 if __name__ == '__main__':
     app.run(debug=True)
