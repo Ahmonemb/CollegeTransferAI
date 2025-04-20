@@ -1,4 +1,4 @@
-const backendUrl = "http://127.0.0.1:5000";
+const backendUrl = "http://localhost:5173/";
 
 let institutionsDict = {};
 let nonCCS = {};
@@ -6,7 +6,7 @@ let academicYears = {};
 let majors = {};
 let agreementGenerated = false;
 
-async function populateData(endpoint, targetObj) {
+export async function populateData(endpoint, targetObj) {
     try {
         const response = await fetch(`${backendUrl}/${endpoint}`);
         const data = await response.json();
@@ -18,7 +18,7 @@ async function populateData(endpoint, targetObj) {
     }
 }
 
-function hideDropdown() {
+export function hideDropdown() {
     setTimeout(() => {
         const instDropdown = document.getElementById("institutionDropdown");
         if (instDropdown) instDropdown.innerHTML = "";
@@ -29,7 +29,7 @@ function hideDropdown() {
     }, 150);
 }
 
-function updateMajorsInputState() {
+export function updateMajorsInputState() {
     const sendingInput = document.getElementById("searchInstitution");
     const receivingInput = document.getElementById("receivingInstitution");
     const academicYearInput = document.getElementById("academicYears");
@@ -50,7 +50,7 @@ function updateMajorsInputState() {
     }
 }
 
-function filterDropdown(inputId, dropdownId, dataObj, dataAttr) {
+export function filterDropdown(inputId, dropdownId, dataObj, dataAttr) {
     const searchInput = document.getElementById(inputId).value.toLowerCase();
     const dropdown = document.getElementById(dropdownId);
     if (!dropdown) return;
@@ -111,7 +111,7 @@ function filterDropdown(inputId, dropdownId, dataObj, dataAttr) {
     });
 }
 
-function filterInstitutions() {
+export function filterInstitutions() {
     filterDropdown("searchInstitution", "institutionDropdown", institutionsDict, "data-sending-institution-id");
     const sendingInput = document.getElementById("searchInstitution");
     const receivingInput = document.getElementById("receivingInstitution");
@@ -125,21 +125,21 @@ function filterInstitutions() {
     updateMajorsInputState();
 }
 
-function filterNonCCs() {
+export function filterNonCCs() {
     filterDropdown("receivingInstitution", "receivingInstitutionDropdown", nonCCS, "data-receiving-institution-id");
     updateMajorsInputState();
 }
 
-function filterAcademicYears() {
+export function filterAcademicYears() {
     filterDropdown("academicYears", "academicYearsDropdown", academicYears, "data-academic-year-id");
     updateMajorsInputState();
 }
 
-function filterMajors() {
+export function filterMajors() {
     filterDropdown("majors", "majorsDropdown", majors, "data-major-id");
 }
 
-async function getInstitutions() {
+export async function getInstitutions() {
     try {
         const response = await fetch(`${backendUrl}/institutions`);
         const data = await response.json();
@@ -149,7 +149,7 @@ async function getInstitutions() {
     }
 }
 
-async function getAcademicYears() {
+export async function getAcademicYears() {
     try {
         const response = await fetch(`${backendUrl}/academic-years`);
         const data = await response.json();
@@ -159,7 +159,7 @@ async function getAcademicYears() {
     }
 }
 
-async function getAllMajors() {
+export async function getAllMajors() {
     const sendingInstitutionInput = document.getElementById("sendingInstitutionId");
     const receivingInstitutionInput = document.getElementById("receivingInstitutionId");
     const academicYearInput = document.getElementById("academicYearId");
@@ -189,7 +189,7 @@ async function getAllMajors() {
     }
 }
 
-async function getMajorKey() {
+export async function getMajorKey() {
     const sendingInstitutionInput = document.getElementById("sendingInstitutionId");
     const receivingInstitutionInput = document.getElementById("receivingInstitutionId");
     const academicYearInput = document.getElementById("academicYearId");
@@ -221,7 +221,7 @@ async function getMajorKey() {
     }
 }
 
-function allDependenciesSelected() {
+export function allDependenciesSelected() {
     const sendingInput = document.getElementById("searchInstitution");
     const receivingInput = document.getElementById("receivingInstitution");
     const academicYearInput = document.getElementById("academicYears");
@@ -232,7 +232,7 @@ function allDependenciesSelected() {
     );
 }
 
-async function getArticulationAgreement(changedField) {
+export async function getArticulationAgreement(changedField) {
     const majorsInput = document.getElementById("majors");
     const key  = majorsInput.getAttribute("data-major-key");
     if (!key) {
@@ -271,7 +271,7 @@ async function getArticulationAgreement(changedField) {
     }
 }
 
-function showLoadingAgreement() {
+export function showLoadingAgreement() {
     const resultContent = document.getElementById("resultContent");
     resultContent.textContent = "Loading Agreement...";
 }
@@ -283,7 +283,7 @@ window.onload = function () {
 };
 
 
-function displayResult(data) {
+export function displayResult(data) {
     const resultContent = document.getElementById("resultContent");
     if (data.pdf_filename) {
         window.open(`/pdf/${data.pdf_filename}`, '_blank');
@@ -295,7 +295,7 @@ function displayResult(data) {
     }
 }
 
-function resetAllFields() {
+export function resetAllFields() {
     document.getElementById("searchInstitution").value = "";
     document.getElementById("searchInstitution").removeAttribute("data-sending-institution-id");
     document.getElementById("receivingInstitution").value = "";
