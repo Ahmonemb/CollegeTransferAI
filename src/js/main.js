@@ -1,4 +1,4 @@
-const backendUrl = "http://localhost:5173/";
+const backendUrl = "http://localhost:5000";
 
 let institutionsDict = {};
 let nonCCS = {};
@@ -10,7 +10,7 @@ export async function populateData(endpoint, targetObj) {
     try {
         const response = await fetch(`${backendUrl}/${endpoint}`);
         const data = await response.json();
-
+        
         Object.assign(targetObj, data);
     } catch (error) {
         console.error(`Error fetching ${endpoint}:`, error);
@@ -286,7 +286,7 @@ window.onload = function () {
 export function displayResult(data) {
     const resultContent = document.getElementById("resultContent");
     if (data.pdf_filename) {
-        window.open(`/pdf/${data.pdf_filename}`, '_blank');
+        window.open(`${backendUrl}/pdf/${data.pdf_filename}`, '_blank');
         resultContent.textContent = "PDF opened in a new tab.";
         agreementGenerated = true; // Set flag
         resetAllFields(); // Reset fields right after generating agreement
