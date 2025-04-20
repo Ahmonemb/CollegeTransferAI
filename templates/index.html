@@ -19,7 +19,7 @@
     <!-- Form to Get All Institutions for Receiving Institution -->
     <div class="form-group">
         <label for="receivingInstitution">Search for Receiving Institution:</label>
-        <input type="text" id="receivingInstitution" placeholder="Type to search..." onkeyup="filterNonCCs()" onfocus="filterNonCCs()" onblur="hideDropdown()" disabled>
+        <input type="text" id="receivingInstitution" placeholder="Type to search..." onkeyup="filterReceivingInstitutions()" onfocus="filterReceivingInstitutions()" onblur="hideDropdown()" disabled>
         <div id="receivingInstitutionDropdown" class="dropdown"></div>
     </div>
 
@@ -36,12 +36,6 @@
         <input type="text" id="majors" placeholder="Type to search..." onkeyup="filterMajors()" onfocus="filterMajors()" onblur="hideDropdown()" disabled>
         <div id="majorsDropdown" class="dropdown" ></div>
     </div>
-
-    <!-- Form to Get Articulation Agreement -->
-    <!--<div class="form-group">
-        <button onclick="getArticulationAgreement()">Get Articulation Agreement</button>
-    </div> -->
-    
 
     <!-- Result Section -->
     <div class="result" id="result">
