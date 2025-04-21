@@ -3,6 +3,7 @@ from playwright.sync_api import sync_playwright
 from pymongo import MongoClient
 import gridfs
 import json
+import os
 
 class CollegeTransferAPI:
     def __init__(self):
@@ -181,7 +182,9 @@ class CollegeTransferAPI:
             f"{self.get_year_from_id(academic_year_id)}.pdf"
         )
 
-        client = MongoClient("mongodb+srv://ahmonembaye:WCpjfEgNcIomkBcN@collegetransferaicluste.vlsybad.mongodb.net/?retryWrites=true&w=majority&appName=CollegeTransferAICluster")
+        MONGO_URI = os.getenv("MONGO_URI") 
+
+        client = MongoClient(MONGO_URI)
         db = client["CollegeTransferAICluster"]
         fs = gridfs.GridFS(db)
 

@@ -1,0 +1,130 @@
+/* Reset and Base Styles */
+body {
+  font-family: Arial, Helvetica, sans-serif; /* Common sans-serif font */
+  margin: 0;
+  padding: 0;
+  background-color: #f0f0f0; /* Light gray background like assist.org */
+  color: #333; /* Standard dark text color */
+  line-height: 1.6;
+}
+
+/* Container for centering content */
+#root > div { /* Target the main div rendered by React */
+  max-width: 960px; /* Max width similar to assist.org content area */
+  margin: 20px auto; /* Center the container */
+  padding: 20px;
+  background-color: #fff; /* White background for content area */
+  border: 1px solid #ccc; /* Subtle border */
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1); /* Slight shadow */
+}
+
+h1, h2, h3 {
+  color: #003366; /* Dark blue for headings */
+  margin-top: 0;
+}
+
+/* Form Styling */
+.form-group {
+  margin-bottom: 1rem;
+  position: relative; /* Needed for absolute positioning of dropdown */
+}
+
+label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-weight: bold;
+  color: #555;
+}
+
+input[type="text"],
+select { /* Style both text inputs and selects similarly */
+  padding: 8px 12px;
+  width: 100%; /* Full width within the container */
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  box-sizing: border-box; /* Include padding and border in width */
+  font-size: 1rem;
+}
+
+input[type="text"]:disabled {
+  background-color: #e9ecef; /* Gray out disabled inputs */
+  cursor: not-allowed;
+}
+
+/* Button Styling */
+button {
+  background-color: #005ea2; /* Assist.org primary blue */
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 1rem;
+  transition: background-color 0.2s ease;
+  display: inline-block; /* Allow setting width if needed, but default to content size */
+  width: auto; /* Override previous 100% width */
+  margin-bottom: 0; /* Remove default margin */
+}
+
+button:hover {
+  background-color: #003366; /* Darker blue on hover */
+}
+
+button:disabled {
+  background-color: #a0a0a0; /* Gray out disabled button */
+  cursor: not-allowed;
+}
+
+/* Result Area */
+.result {
+  margin-top: 25px;
+  padding: 15px;
+  border: 1px solid #ddd;
+  background-color: #f8f8f8;
+  border-radius: 4px;
+}
+
+.result h3 {
+  margin-top: 0;
+  color: #555;
+}
+
+/* Dropdown Styling */
+.dropdown {
+  position: absolute;
+  background-color: white;
+  border: 1px solid #ccc;
+  border-top: none; /* Attach visually to input */
+  max-height: 250px;
+  overflow-y: auto;
+  width: 100%; /* Match input width */
+  box-sizing: border-box;
+  z-index: 1000;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+  border-radius: 0 0 4px 4px; /* Rounded bottom corners */
+}
+
+.dropdown-item {
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 0.95rem;
+  border-bottom: 1px solid #eee; /* Separator lines */
+}
+.dropdown-item:last-child {
+  border-bottom: none;
+}
+
+.dropdown-item:hover {
+  background-color: #e9f5ff; /* Light blue hover */
+  color: #005ea2;
+}
+
+/* Link Styling (e.g., Back to Form in PdfViewer) */
+a {
+  color: #005ea2;
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
