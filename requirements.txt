@@ -5,3 +5,4 @@ pymongo
 playwright
 jinja2
 pytest
+PyMuPDF
