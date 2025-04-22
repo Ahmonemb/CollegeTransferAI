@@ -10,33 +10,27 @@ const CollegeTransferForm = () => {
     const [institutions, setInstitutions] = useState({});
     const [receivingInstitutions, setReceivingInstitutions] = useState({});
     const [academicYears, setAcademicYears] = useState({});
-    // REMOVED: const [majors, setMajors] = useState({});
 
     // --- State for input values and selections ---
     const [sendingInputValue, setSendingInputValue] = useState('');
     const [receivingInputValue, setReceivingInputValue] = useState('');
     const [yearInputValue, setYearInputValue] = useState('');
-    // REMOVED: const [majorInputValue, setMajorInputValue] = useState('');
 
     const [selectedSendingId, setSelectedSendingId] = useState(null);
     const [selectedReceivingId, setSelectedReceivingId] = useState(null);
     const [selectedYearId, setSelectedYearId] = useState(null);
-    // REMOVED: const [selectedMajorKey, setSelectedMajorKey] = useState(null);
 
     // --- State for dropdown visibility and filtered options ---
     const [showSendingDropdown, setShowSendingDropdown] = useState(false);
     const [showReceivingDropdown, setShowReceivingDropdown] = useState(false);
     const [showYearDropdown, setShowYearDropdown] = useState(false);
-    // REMOVED: const [showMajorDropdown, setShowMajorDropdown] = useState(false);
 
     const [filteredInstitutions, setFilteredInstitutions] = useState([]);
     const [filteredReceiving, setFilteredReceiving] = useState([]);
     const [filteredYears, setFilteredYears] = useState([]);
-    // REMOVED: const [filteredMajors, setFilteredMajors] = useState([]);
 
     // --- State for loading and results ---
     const [isLoading] = useState(false); // Keep for initial loads if needed
-    const [resultMessage, setResultMessage] = useState('Select institutions and year to view available majors.'); // Updated message
     const [error, setError] = useState(null);
 
     // --- Helper Functions ---
@@ -44,22 +38,16 @@ const CollegeTransferForm = () => {
         setSendingInputValue('');
         setReceivingInputValue('');
         setYearInputValue('');
-        // REMOVED: setMajorInputValue('');
         setSelectedSendingId(null);
         setSelectedReceivingId(null);
         setSelectedYearId(null);
-        // REMOVED: setSelectedMajorKey(null);
         setReceivingInstitutions({});
-        // REMOVED: setMajors({});
         setFilteredInstitutions([]);
         setFilteredReceiving([]);
         setFilteredYears([]);
-        // REMOVED: setFilteredMajors([]);
         setShowSendingDropdown(false);
         setShowReceivingDropdown(false);
         setShowYearDropdown(false);
-        // REMOVED: setShowMajorDropdown(false);
-        setResultMessage('Select institutions and year to view available majors.'); // Updated message
         setError(null);
     }, []);
 
@@ -79,11 +67,6 @@ const CollegeTransferForm = () => {
         setSelectedReceivingId(null);
         setReceivingInstitutions({});
         setFilteredReceiving([]);
-        // Clear major related states if they were previously set (good practice after refactor)
-        // REMOVED: setMajorInputValue('');
-        // REMOVED: setSelectedMajorKey(null);
-        // REMOVED: setMajors({});
-        // REMOVED: setFilteredMajors([]);
 
         if (selectedSendingId) {
             fetchData(`receiving-institutions?sendingInstitutionId=${selectedSendingId}`)
@@ -91,8 +74,6 @@ const CollegeTransferForm = () => {
                 .catch(err => setError(`Failed to load receiving institutions: ${err.message}`));
         }
     }, [selectedSendingId]);
-
-    // REMOVED: useEffect hook that fetched majors
 
     // --- Effects for Filtering Dropdowns ---
     const filter = useCallback(
@@ -141,8 +122,6 @@ const CollegeTransferForm = () => {
         }
     }, [yearInputValue, academicYears, filter]);
 
-    // REMOVED: useEffect hook for filtering majors
-
     // --- Event Handlers ---
     const handleInputChange = (e, setInputValue) => {
         setInputValue(e.target.value);
@@ -176,7 +155,6 @@ const CollegeTransferForm = () => {
         }
     };
 
-    // MODIFIED: Renamed and changed logic
     const handleViewMajors = () => { // Keep name or rename to handleViewAgreements
         if (!selectedSendingId || !selectedReceivingId || !selectedYearId) {
             setError("Please select sending institution, receiving institution, and academic year first.");
@@ -208,13 +186,13 @@ const CollegeTransferForm = () => {
 
     // --- Component JSX ---
     return (
-        <div>
+        <div style={{ maxWidth: "960px"}}>
             <h1>College Transfer AI</h1>
             {error && <div style={{ color: 'red', marginBottom: '1em' }}>Error: {error}</div>}
 
             {/* Sending Institution */}
             <div className="form-group">
-                <label htmlFor="searchInstitution">Sending Institution:</label>
+                <label htmlFor="searchInstitutions">Sending Institution:</label>
                 <input
                     type="text"
                     id="searchInstitution"
@@ -226,7 +204,7 @@ const CollegeTransferForm = () => {
                         setFilteredInstitutions(allOptions);
                         setShowSendingDropdown(true);
                     }}
-                    onBlur={() =>  setShowSendingDropdown(false)} // Delay to allow click
+                    onBlur={() =>  setShowSendingDropdown(false)} 
                     autoComplete="off"
                 />
                 {renderDropdown(filteredInstitutions, showSendingDropdown, 'sending')}
@@ -234,7 +212,7 @@ const CollegeTransferForm = () => {
 
             {/* Receiving Institution */}
             <div className="form-group">
-                <label htmlFor="receivingInstitution">Receiving Institution:</label>
+                <label htmlFor="receivingInstitutions">Receiving Institution:</label>
                 <input
                     type="text"
                     id="receivingInstitution"
@@ -255,7 +233,7 @@ const CollegeTransferForm = () => {
 
             {/* Academic Year */}
             <div className="form-group">
-                <label htmlFor="academicYears">Academic Year:</label>
+                <label htmlFor="academicYear">Academic Year:</label>
                 <input
                     type="text"
                     id="academicYears"
@@ -282,12 +260,6 @@ const CollegeTransferForm = () => {
             >
                 {isLoading ? 'Loading...' : 'View Agreements'} {/* Updated text */}
             </button>
-
-            {/* Result message area (optional, could be removed or kept for general status) */}
-            <div className="result" id="result" style={{ marginTop: '1em' }}>
-                <h3>Status:</h3>
-                <pre id="resultContent">{resultMessage}</pre>
-            </div>
         </div>
     );
 };

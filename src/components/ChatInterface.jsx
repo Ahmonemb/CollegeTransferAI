@@ -9,7 +9,6 @@ function ChatInterface({ imageFilenames, selectedMajorName }) {
 
     // Clear chat when imageFilenames change (new agreement selected)
     useEffect(() => {
-        setMessages([{ type: 'system', text: `Chatting about: ${selectedMajorName || 'Agreement'}` }]);
         setUserInput('');
         setChatError(null);
     }, [imageFilenames, selectedMajorName]);
@@ -83,8 +82,8 @@ function ChatInterface({ imageFilenames, selectedMajorName }) {
                     type="text"
                     value={userInput}
                     onChange={(e) => setUserInput(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && handleSend()}
-                    placeholder="Ask about the agreement..."
+                    onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+                    placeholder="Select a major..."
                     style={{ flexGrow: 1, marginRight: '10px', padding: '8px' }}
                     disabled={isLoading || !imageFilenames || imageFilenames.length === 0}
                 />

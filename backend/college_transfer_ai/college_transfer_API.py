@@ -9,7 +9,6 @@ class CollegeTransferAPI:
     def __init__(self):
         self.base_url = "https://assist.org/api/"
 
-
     def get_academic_years(self):
         url = self.base_url + "AcademicYears"
         response = requests.get(url)
