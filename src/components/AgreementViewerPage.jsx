@@ -64,8 +64,6 @@ function AgreementViewerPage() {
                 setMajors(cachedMajors);
                 setIsLoadingMajors(false);
                 setError(null);
-                // Optional: You could still fetch in the background here to update the cache
-                // if you want fresher data without blocking the initial load.
                 return; // Exit early if loaded from cache
             }
         } catch (e) {

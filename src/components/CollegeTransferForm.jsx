@@ -53,11 +53,67 @@ const CollegeTransferForm = () => {
 
     // --- Effects for Initial Data Loading ---
     useEffect(() => {
+        const cacheInstitutionsKey = "instutions"
+        let cachedInstitutions = null
+
+        try {
+            const cachedData = localStorage.getItem(cacheInstitutionsKey);
+            if (cachedData) {
+                cachedInstitutions = JSON.parse(cachedData);
+                console.log("Loaded institutions from cache:", cacheInstitutionsKey);
+                setInstitutions(cachedInstitutions);
+                setError(null);
+                return;
+            }
+        } catch (e) {
+            console.error("Error loading institutions from cache:", e);
+            localStorage.removeItem(cacheInstitutionsKey); // Clear cache on error
+        }
+
+        
         fetchData('institutions')
-            .then(data => setInstitutions(data))
+            .then(data => {
+                setInstitutions(data)
+                try {
+                    localStorage.setItem(cacheInstitutionsKey, JSON.stringify(data));
+                    console.log("Institutions cached successfully:", cacheInstitutionsKey);
+                } catch (e) {
+                    console.error("Error caching institutions:", e);
+                }
+            })
             .catch(err => setError(`Failed to load institutions: ${err.message}`));
+        
+    }, []);
+
+    useEffect(() => {
+
+        const cacheAcademicYearsKey = "academic-years"
+        let cachedAcademicYears = null
+
+        try {
+            const cachedData = localStorage.getItem(cacheAcademicYearsKey);
+            if (cachedData) {
+                cachedAcademicYears = JSON.parse(cachedData);
+                console.log("Loaded academic years from cache:", cacheAcademicYearsKey);
+                setAcademicYears(cachedAcademicYears);
+                setError(null);
+                return;
+            }
+        } catch (e) {
+            console.error("Error loading academic years from cache:", e);
+            localStorage.removeItem(cacheAcademicYearsKey); // Clear cache on error
+        }
+
         fetchData('academic-years')
-            .then(data => setAcademicYears(data))
+            .then(data => {
+                setAcademicYears(data)
+                try {
+                    localStorage.setItem(cacheAcademicYearsKey, JSON.stringify(data));
+                    console.log("Academic Years cached successfully:", cacheAcademicYearsKey);
+                } catch (e) {
+                    console.error("Error caching academic years:", e);
+                }
+            })
             .catch(err => setError(`Failed to load academic years: ${err.message}`));
     }, []);
 
@@ -68,9 +124,35 @@ const CollegeTransferForm = () => {
         setReceivingInstitutions({});
         setFilteredReceiving([]);
 
+        const cacheReceivingInstitutionsKey = `receiving-instutions-${selectedSendingId}`
+        let cachedReceivingInstitutions = null
+
+        try {
+            const cachedData = localStorage.getItem(cacheReceivingInstitutionsKey);
+            if (cachedData) {
+                cachedReceivingInstitutions = JSON.parse(cachedData);
+                console.log("Loaded receiving institutions from cache:", cacheReceivingInstitutionsKey);
+                setReceivingInstitutions(cachedReceivingInstitutions);
+                setError(null);
+                return;
+            }
+        } catch (e) {
+            console.error("Error loading receiving institutions from cache:", e);
+            localStorage.removeItem(cacheReceivingInstitutionsKey); // Clear cache on error
+        }
+
+
         if (selectedSendingId) {
             fetchData(`receiving-institutions?sendingInstitutionId=${selectedSendingId}`)
-                .then(data => setReceivingInstitutions(data))
+                .then(data => {
+                    setReceivingInstitutions(data)
+                    try {
+                        localStorage.setItem(cacheReceivingInstitutionsKey, JSON.stringify(data));
+                        console.log("Receiving institutions cached successfully:", cacheReceivingInstitutionsKey);
+                    } catch (e) {
+                        console.error("Error caching receiving institutions:", e);
+                    }
+                })
                 .catch(err => setError(`Failed to load receiving institutions: ${err.message}`));
         }
     }, [selectedSendingId]);
