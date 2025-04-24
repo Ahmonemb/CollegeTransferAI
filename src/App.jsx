@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'; // Import useEffect
+import React, { useState } from 'react';
 import { Routes, Route, Link, useNavigate } from 'react-router-dom';
 import { GoogleLogin, googleLogout } from '@react-oauth/google';
 import { jwtDecode } from "jwt-decode";
@@ -17,21 +17,33 @@ function App() {
       const storedUser = localStorage.getItem(USER_STORAGE_KEY);
       if (storedUser) {
         const parsedUser = JSON.parse(storedUser);
-        // Optional: Add token expiration check here
-        // const decoded = jwtDecode(parsedUser.idToken);
-        // if (decoded.exp * 1000 < Date.now()) {
-        //   console.log("Stored token expired, clearing storage.");
-        //   localStorage.removeItem(USER_STORAGE_KEY);
-        //   return null; // Treat as logged out
-        // }
-        console.log("Loaded user from localStorage");
+
+        // *** Check Token Expiration ***
+        if (parsedUser.idToken) {
+          const decoded = jwtDecode(parsedUser.idToken);
+          const isExpired = decoded.exp * 1000 < Date.now(); // Convert exp (seconds) to milliseconds
+
+          if (isExpired) {
+            console.log("Stored token expired, clearing storage.");
+            localStorage.removeItem(USER_STORAGE_KEY);
+            return null; // Treat as logged out
+          }
+        } else {
+           // Handle case where token might be missing in stored data
+           console.warn("Stored user data missing idToken, clearing storage.");
+           localStorage.removeItem(USER_STORAGE_KEY);
+           return null;
+        }
+        // *** End Check ***
+
+        console.log("Loaded valid user from localStorage");
         return parsedUser;
       }
     } catch (error) {
-      console.error("Failed to load user from localStorage:", error);
-      localStorage.removeItem(USER_STORAGE_KEY); // Clear corrupted data
+      console.error("Failed to load or validate user from localStorage:", error);
+      localStorage.removeItem(USER_STORAGE_KEY); // Clear corrupted/invalid data
     }
-    return null; // Default to null if nothing valid is stored
+    return null; // Default to null
   });
 
   const navigate = useNavigate();

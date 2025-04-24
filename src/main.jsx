@@ -19,9 +19,8 @@ if (!googleClientId) {
 
 createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    {/* Pass the loaded client ID */}
     <GoogleOAuthProvider clientId={googleClientId}>
-      <BrowserRouter>
+      <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <App />
       </BrowserRouter>
     </GoogleOAuthProvider>

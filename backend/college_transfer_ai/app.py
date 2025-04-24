@@ -265,7 +265,7 @@ def chat_with_agreement():
 # --- End Existing Endpoints ---
 
 
-# --- UPDATED/NEW: Course Map Endpoints ---
+# --- Course Map Endpoints ---
 
 # GET /api/course-maps - List all maps for the user
 @app.route('/course-maps', methods=['GET'])
@@ -409,7 +409,7 @@ def delete_specific_course_map(map_id):
         )
 
         # --- Add Logging ---
-        print(f"[Delete Result] Matched: {result.matched_count}, Deleted: {result.deleted_count}")
+        print(f"[Delete Result] Deleted: {result.deleted_count}")
         # --- End Logging ---
 
         if result.deleted_count > 0:
