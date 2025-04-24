@@ -8,5 +8,3 @@ pytest
 PyMuPDF
 openai
 dotenv
-react-router-dom
-react
