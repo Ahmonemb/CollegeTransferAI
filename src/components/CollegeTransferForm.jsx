@@ -10,33 +10,27 @@ const CollegeTransferForm = () => {
     const [institutions, setInstitutions] = useState({});
     const [receivingInstitutions, setReceivingInstitutions] = useState({});
     const [academicYears, setAcademicYears] = useState({});
-    // REMOVED: const [majors, setMajors] = useState({});
 
     // --- State for input values and selections ---
     const [sendingInputValue, setSendingInputValue] = useState('');
     const [receivingInputValue, setReceivingInputValue] = useState('');
     const [yearInputValue, setYearInputValue] = useState('');
-    // REMOVED: const [majorInputValue, setMajorInputValue] = useState('');
 
     const [selectedSendingId, setSelectedSendingId] = useState(null);
     const [selectedReceivingId, setSelectedReceivingId] = useState(null);
     const [selectedYearId, setSelectedYearId] = useState(null);
-    // REMOVED: const [selectedMajorKey, setSelectedMajorKey] = useState(null);
 
     // --- State for dropdown visibility and filtered options ---
     const [showSendingDropdown, setShowSendingDropdown] = useState(false);
     const [showReceivingDropdown, setShowReceivingDropdown] = useState(false);
     const [showYearDropdown, setShowYearDropdown] = useState(false);
-    // REMOVED: const [showMajorDropdown, setShowMajorDropdown] = useState(false);
 
     const [filteredInstitutions, setFilteredInstitutions] = useState([]);
     const [filteredReceiving, setFilteredReceiving] = useState([]);
     const [filteredYears, setFilteredYears] = useState([]);
-    // REMOVED: const [filteredMajors, setFilteredMajors] = useState([]);
 
     // --- State for loading and results ---
     const [isLoading] = useState(false); // Keep for initial loads if needed
-    const [resultMessage, setResultMessage] = useState('Select institutions and year to view available majors.'); // Updated message
     const [error, setError] = useState(null);
 
     // --- Helper Functions ---
@@ -44,32 +38,82 @@ const CollegeTransferForm = () => {
         setSendingInputValue('');
         setReceivingInputValue('');
         setYearInputValue('');
-        // REMOVED: setMajorInputValue('');
         setSelectedSendingId(null);
         setSelectedReceivingId(null);
         setSelectedYearId(null);
-        // REMOVED: setSelectedMajorKey(null);
         setReceivingInstitutions({});
-        // REMOVED: setMajors({});
         setFilteredInstitutions([]);
         setFilteredReceiving([]);
         setFilteredYears([]);
-        // REMOVED: setFilteredMajors([]);
         setShowSendingDropdown(false);
         setShowReceivingDropdown(false);
         setShowYearDropdown(false);
-        // REMOVED: setShowMajorDropdown(false);
-        setResultMessage('Select institutions and year to view available majors.'); // Updated message
         setError(null);
     }, []);
 
     // --- Effects for Initial Data Loading ---
     useEffect(() => {
+        const cacheInstitutionsKey = "instutions"
+        let cachedInstitutions = null
+
+        try {
+            const cachedData = localStorage.getItem(cacheInstitutionsKey);
+            if (cachedData) {
+                cachedInstitutions = JSON.parse(cachedData);
+                console.log("Loaded institutions from cache:", cacheInstitutionsKey);
+                setInstitutions(cachedInstitutions);
+                setError(null);
+                return;
+            }
+        } catch (e) {
+            console.error("Error loading institutions from cache:", e);
+            localStorage.removeItem(cacheInstitutionsKey); // Clear cache on error
+        }
+
+        
         fetchData('institutions')
-            .then(data => setInstitutions(data))
+            .then(data => {
+                setInstitutions(data)
+                try {
+                    localStorage.setItem(cacheInstitutionsKey, JSON.stringify(data));
+                    console.log("Institutions cached successfully:", cacheInstitutionsKey);
+                } catch (e) {
+                    console.error("Error caching institutions:", e);
+                }
+            })
             .catch(err => setError(`Failed to load institutions: ${err.message}`));
+        
+    }, []);
+
+    useEffect(() => {
+
+        const cacheAcademicYearsKey = "academic-years"
+        let cachedAcademicYears = null
+
+        try {
+            const cachedData = localStorage.getItem(cacheAcademicYearsKey);
+            if (cachedData) {
+                cachedAcademicYears = JSON.parse(cachedData);
+                console.log("Loaded academic years from cache:", cacheAcademicYearsKey);
+                setAcademicYears(cachedAcademicYears);
+                setError(null);
+                return;
+            }
+        } catch (e) {
+            console.error("Error loading academic years from cache:", e);
+            localStorage.removeItem(cacheAcademicYearsKey); // Clear cache on error
+        }
+
         fetchData('academic-years')
-            .then(data => setAcademicYears(data))
+            .then(data => {
+                setAcademicYears(data)
+                try {
+                    localStorage.setItem(cacheAcademicYearsKey, JSON.stringify(data));
+                    console.log("Academic Years cached successfully:", cacheAcademicYearsKey);
+                } catch (e) {
+                    console.error("Error caching academic years:", e);
+                }
+            })
             .catch(err => setError(`Failed to load academic years: ${err.message}`));
     }, []);
 
@@ -79,20 +123,39 @@ const CollegeTransferForm = () => {
         setSelectedReceivingId(null);
         setReceivingInstitutions({});
         setFilteredReceiving([]);
-        // Clear major related states if they were previously set (good practice after refactor)
-        // REMOVED: setMajorInputValue('');
-        // REMOVED: setSelectedMajorKey(null);
-        // REMOVED: setMajors({});
-        // REMOVED: setFilteredMajors([]);
+
+        const cacheReceivingInstitutionsKey = `receiving-instutions-${selectedSendingId}`
+        let cachedReceivingInstitutions = null
+
+        try {
+            const cachedData = localStorage.getItem(cacheReceivingInstitutionsKey);
+            if (cachedData) {
+                cachedReceivingInstitutions = JSON.parse(cachedData);
+                console.log("Loaded receiving institutions from cache:", cacheReceivingInstitutionsKey);
+                setReceivingInstitutions(cachedReceivingInstitutions);
+                setError(null);
+                return;
+            }
+        } catch (e) {
+            console.error("Error loading receiving institutions from cache:", e);
+            localStorage.removeItem(cacheReceivingInstitutionsKey); // Clear cache on error
+        }
+
 
         if (selectedSendingId) {
             fetchData(`receiving-institutions?sendingInstitutionId=${selectedSendingId}`)
-                .then(data => setReceivingInstitutions(data))
+                .then(data => {
+                    setReceivingInstitutions(data)
+                    try {
+                        localStorage.setItem(cacheReceivingInstitutionsKey, JSON.stringify(data));
+                        console.log("Receiving institutions cached successfully:", cacheReceivingInstitutionsKey);
+                    } catch (e) {
+                        console.error("Error caching receiving institutions:", e);
+                    }
+                })
                 .catch(err => setError(`Failed to load receiving institutions: ${err.message}`));
         }
     }, [selectedSendingId]);
-
-    // REMOVED: useEffect hook that fetched majors
 
     // --- Effects for Filtering Dropdowns ---
     const filter = useCallback(
@@ -141,8 +204,6 @@ const CollegeTransferForm = () => {
         }
     }, [yearInputValue, academicYears, filter]);
 
-    // REMOVED: useEffect hook for filtering majors
-
     // --- Event Handlers ---
     const handleInputChange = (e, setInputValue) => {
         setInputValue(e.target.value);
@@ -176,7 +237,6 @@ const CollegeTransferForm = () => {
         }
     };
 
-    // MODIFIED: Renamed and changed logic
     const handleViewMajors = () => { // Keep name or rename to handleViewAgreements
         if (!selectedSendingId || !selectedReceivingId || !selectedYearId) {
             setError("Please select sending institution, receiving institution, and academic year first.");
@@ -208,13 +268,13 @@ const CollegeTransferForm = () => {
 
     // --- Component JSX ---
     return (
-        <div>
+        <div style={{ maxWidth: "960px"}}>
             <h1>College Transfer AI</h1>
             {error && <div style={{ color: 'red', marginBottom: '1em' }}>Error: {error}</div>}
 
             {/* Sending Institution */}
             <div className="form-group">
-                <label htmlFor="searchInstitution">Sending Institution:</label>
+                <label htmlFor="searchInstitutions">Sending Institution:</label>
                 <input
                     type="text"
                     id="searchInstitution"
@@ -226,7 +286,7 @@ const CollegeTransferForm = () => {
                         setFilteredInstitutions(allOptions);
                         setShowSendingDropdown(true);
                     }}
-                    onBlur={() =>  setShowSendingDropdown(false)} // Delay to allow click
+                    onBlur={() =>  setShowSendingDropdown(false)} 
                     autoComplete="off"
                 />
                 {renderDropdown(filteredInstitutions, showSendingDropdown, 'sending')}
@@ -234,7 +294,7 @@ const CollegeTransferForm = () => {
 
             {/* Receiving Institution */}
             <div className="form-group">
-                <label htmlFor="receivingInstitution">Receiving Institution:</label>
+                <label htmlFor="receivingInstitutions">Receiving Institution:</label>
                 <input
                     type="text"
                     id="receivingInstitution"
@@ -255,7 +315,7 @@ const CollegeTransferForm = () => {
 
             {/* Academic Year */}
             <div className="form-group">
-                <label htmlFor="academicYears">Academic Year:</label>
+                <label htmlFor="academicYear">Academic Year:</label>
                 <input
                     type="text"
                     id="academicYears"
@@ -282,12 +342,6 @@ const CollegeTransferForm = () => {
             >
                 {isLoading ? 'Loading...' : 'View Agreements'} {/* Updated text */}
             </button>
-
-            {/* Result message area (optional, could be removed or kept for general status) */}
-            <div className="result" id="result" style={{ marginTop: '1em' }}>
-                <h3>Status:</h3>
-                <pre id="resultContent">{resultMessage}</pre>
-            </div>
         </div>
     );
 };

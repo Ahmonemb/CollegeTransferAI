@@ -10,7 +10,6 @@ body {
 
 /* Container for centering content */
 #root > div { /* Target the main div rendered by React */
-  max-width: 960px; /* Max width similar to assist.org content area */
   margin: 20px auto; /* Center the container */
   padding: 20px;
   background-color: #fff; /* White background for content area */

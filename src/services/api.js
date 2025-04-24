@@ -6,6 +6,7 @@
  * @returns {Promise<object|null>} - A promise that resolves with the JSON data or null for empty responses.
  * @throws {Error} - Throws an error if the fetch fails or response is not ok.
  */
+
 export async function fetchData(endpoint, options = {}) {
     // Construct the full URL, always prepending /api/
     // Ensure no double slashes if endpoint accidentally starts with one
@@ -13,8 +14,6 @@ export async function fetchData(endpoint, options = {}) {
     const url = `/api/${cleanEndpoint}`; // Use relative path for the proxy
 
     try {
-        console.log(`Fetching data from: ${url} with options:`, options); // Log URL and options
-
         // *** Pass the options object as the second argument to fetch ***
         const response = await fetch(url, options);
 
