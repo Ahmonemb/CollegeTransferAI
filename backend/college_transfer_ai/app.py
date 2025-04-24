@@ -5,7 +5,7 @@ import uuid # Import uuid for map IDs
 import datetime # Import datetime
 from flask import Flask, jsonify, request, Response
 from flask_cors import CORS
-from backend.college_transfer_ai.college_transfer_API import CollegeTransferAPI
+from .college_transfer_API import CollegeTransferAPI # Use a leading dot
 import gridfs
 from pymongo import MongoClient
 import fitz
