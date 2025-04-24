@@ -1,77 +1,93 @@
 /* Reset and Base Styles */
 body {
-  font-family: Arial, Helvetica, sans-serif; /* Common sans-serif font */
+  font-family: Arial, Helvetica, sans-serif;
   margin: 0;
   padding: 0;
-  background-color: #f0f0f0; /* Light gray background like assist.org */
-  color: #333; /* Standard dark text color */
+  background-color: #F4F4F4;
+  color: #000;
   line-height: 1.6;
+  background-image: url('@/assets/images/LOGO.jpg'); /* If using Vite/Webpack aliases */
+
+
+  background-repeat: no-repeat;
+  background-position: top right; /* You can adjust this to 'center' or other positions */
+  background-size: 150px; /* Adjust the size of the logo */
+  background-attachment: fixed; /* Remove or change to 'scroll' if it causes issues */
 }
 
 /* Container for centering content */
-#root > div { /* Target the main div rendered by React */
-  max-width: 960px; /* Max width similar to assist.org content area */
-  margin: 20px auto; /* Center the container */
+#root > div {
+  max-width: 960px;
+  margin: 20px auto;
   padding: 20px;
-  background-color: #fff; /* White background for content area */
-  border: 1px solid #ccc; /* Subtle border */
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1); /* Slight shadow */
+  background-color: #FFFFFF;
+  border: 2px solid #9B1C2A;
+  box-shadow: 0 0 20px rgba(0, 0, 0, 0.2);
+  border-radius: 8px;
 }
 
 h1, h2, h3 {
-  color: #003366; /* Dark blue for headings */
+  color: #000;
   margin-top: 0;
+  font-weight: 800;
+  text-shadow: 1px 1px #FDB927;
 }
 
 /* Form Styling */
 .form-group {
   margin-bottom: 1rem;
-  position: relative; /* Needed for absolute positioning of dropdown */
+  position: relative;
 }
 
 label {
   display: block;
   margin-bottom: 0.5rem;
   font-weight: bold;
-  color: #555;
+  color: #000;
 }
 
 input[type="text"],
-select { /* Style both text inputs and selects similarly */
+select {
   padding: 8px 12px;
-  width: 100%; /* Full width within the container */
-  border: 1px solid #ccc;
+  width: 100%;
+  border: 2px solid #000;
   border-radius: 4px;
-  box-sizing: border-box; /* Include padding and border in width */
+  box-sizing: border-box;
   font-size: 1rem;
+  outline-color: #FDB927;
+  background-color: #fffbe6;
+  color: #000;
 }
 
 input[type="text"]:disabled {
-  background-color: #e9ecef; /* Gray out disabled inputs */
+  background-color: #e9ecef;
   cursor: not-allowed;
 }
 
 /* Button Styling */
 button {
-  background-color: #005ea2; /* Assist.org primary blue */
-  color: white;
-  border: none;
+  background-color: #FDB927;
+  color: #000;
+  border: 2px solid #000;
   padding: 10px 20px;
-  border-radius: 4px;
+  border-radius: 5px;
   cursor: pointer;
   font-size: 1rem;
-  transition: background-color 0.2s ease;
-  display: inline-block; /* Allow setting width if needed, but default to content size */
-  width: auto; /* Override previous 100% width */
-  margin-bottom: 0; /* Remove default margin */
+  font-weight: bold;
+  transition: background-color 0.3s ease, box-shadow 0.2s ease;
+  display: inline-block;
+  width: auto;
+  margin-bottom: 0;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
 }
 
 button:hover {
-  background-color: #003366; /* Darker blue on hover */
+  background-color: #e6a700;
+  box-shadow: 0 0 12px #FDB927;
 }
 
 button:disabled {
-  background-color: #a0a0a0; /* Gray out disabled button */
+  background-color: #a0a0a0;
   cursor: not-allowed;
 }
 
@@ -79,52 +95,67 @@ button:disabled {
 .result {
   margin-top: 25px;
   padding: 15px;
-  border: 1px solid #ddd;
-  background-color: #f8f8f8;
+  border: 2px solid #000;
+  background-color: #fff8e1;
   border-radius: 4px;
+  color: #000;
 }
 
 .result h3 {
   margin-top: 0;
-  color: #555;
+  color: #000;
 }
 
 /* Dropdown Styling */
 .dropdown {
   position: absolute;
-  background-color: white;
-  border: 1px solid #ccc;
-  border-top: none; /* Attach visually to input */
+  background-color: #fffbe6;
+  border: 2px solid #000;
+  border-top: none;
   max-height: 250px;
   overflow-y: auto;
-  width: 100%; /* Match input width */
+  width: 100%;
   box-sizing: border-box;
   z-index: 1000;
-  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-  border-radius: 0 0 4px 4px; /* Rounded bottom corners */
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  border-radius: 0 0 4px 4px;
 }
 
 .dropdown-item {
   padding: 8px 12px;
   cursor: pointer;
   font-size: 0.95rem;
-  border-bottom: 1px solid #eee; /* Separator lines */
+  border-bottom: 1px solid #ddd;
+  color: #000;
 }
+
 .dropdown-item:last-child {
   border-bottom: none;
 }
 
 .dropdown-item:hover {
-  background-color: #e9f5ff; /* Light blue hover */
-  color: #005ea2;
+  background-color: #fde9a5;
+  color: #000;
 }
 
-/* Link Styling (e.g., Back to Form in PdfViewer) */
+/* Link Styling */
 a {
-  color: #005ea2;
+  color: #000;
   text-decoration: none;
+  font-weight: bold;
 }
 
 a:hover {
   text-decoration: underline;
+  color: #FDB927;
+}
+
+/* Status Box */
+.status {
+  background-color: #fff3cd;
+  border: 2px solid #FDB927;
+  padding: 1rem;
+  color: #000;
+  border-radius: 4px;
+  font-weight: bold;
 }
