@@ -17,6 +17,11 @@ from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
 # --- End Google Auth Imports ---
 
+# --- Google AI Imports ---
+import google.generativeai as genai
+from google.generativeai.types import HarmCategory, HarmBlockThreshold
+# --- End Google AI Imports ---
+
 print("--- Flask app.py loading ---")
 load_dotenv()
 
@@ -24,7 +29,23 @@ load_dotenv()
 openai_api_key = os.getenv("OPENAI_API_KEY")
 MONGO_URI = os.getenv("MONGO_URI")
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 # --- End Config Vars ---
+
+# --- Add this print statement ---
+print(f"--- Attempting to configure Google AI with Key: '{GOOGLE_API_KEY}' ---")
+# --- End print statement ---
+
+# Google AI Client Setup
+if not GOOGLE_API_KEY:
+    print("Warning; GOOGLE_API_KEY not set. Google AI chat will fail.")
+else:
+    try:
+        genai.configure(api_key=GOOGLE_API_KEY)
+        print("Google AI client configured successfully.")
+    except Exception as e:
+        print(f"CRITICAL: Failed to configure Google AI client: {e}")
+# --- End Google AI Client Setup ---
 
 # --- Client Setups ---
 if not openai_api_key: print("Warning: OPENAI_API_KEY not set.")
@@ -221,48 +242,101 @@ def serve_image(image_filename):
 # Chat Endpoint (remains the same, does not use Google Auth)
 @app.route('/chat', methods=['POST'])
 def chat_with_agreement():
-    if not openai_client: return jsonify({"error": "OpenAI client not configured."}), 500
+    if not GOOGLE_API_KEY: # Check if Google AI is configured
+        return jsonify({"error": "Google AI client not configured."}), 500
+
     try:
         data = request.get_json()
         if not data: return jsonify({"error": "Invalid JSON payload"}), 400
+
         new_user_message_text = data.get('new_message')
-        conversation_history = data.get('history', [])
-        image_filenames = data.get('image_filenames')
+        # Google's ChatSession manages history internally, but we need to format it initially
+        openai_history = data.get('history', [])
+        image_filenames = data.get('image_filenames') # Only sent on first turn
+
         if not new_user_message_text: return jsonify({"error": "Missing 'new_message' text"}), 400
 
-        new_openai_message_content = [{"type": "text", "text": new_user_message_text}]
+        # Inside the /chat endpoint
+
+        # --- Prepare Input for Gemini ---
+        prompt_parts = [new_user_message_text] # Start with the text part
+
         if image_filenames:
-            print(f"Processing {len(image_filenames)} images for the first turn.")
+            print(f"Processing {len(image_filenames)} images for Gemini.")
             image_count = 0
             for filename in image_filenames:
                 try:
                     grid_out = fs.find_one({"filename": filename})
-                    if not grid_out: continue
-                    base64_image = base64.b64encode(grid_out.read()).decode('utf-8')
-                    new_openai_message_content.append({
-                        "type": "image_url",
-                        "image_url": {"url": f"data:{getattr(grid_out, 'contentType', 'image/png')};base64,{base64_image}"}
+                    if not grid_out:
+                        print(f"Image {filename} not found in GridFS. Skipping.")
+                        continue
+
+                    image_bytes = grid_out.read()
+                    # --- Determine MIME type (ensure it's correct) ---
+                    # Use getattr for safety, default to image/png if not found
+                    mime_type = getattr(grid_out, 'contentType', None)
+                    if not mime_type:
+                         # Basic check based on filename extension if contentType is missing
+                         if filename.lower().endswith(".jpg") or filename.lower().endswith(".jpeg"):
+                             mime_type = "image/jpeg"
+                         elif filename.lower().endswith(".png"):
+                              mime_type = "image/png"
+                         # Add more types if needed (webp, heic, heif)
+                         else:
+                             mime_type = "image/png" # Default fallback
+                         print(f"Warning: contentType missing for {filename}, inferred as {mime_type}")
+                    # --- End MIME type determination ---
+
+
+                    # --- Correct way to add image part ---
+                    # Append a dictionary, not genai.types.Part
+                    prompt_parts.append({
+                        "mime_type": mime_type,
+                        "data": image_bytes # Send raw bytes directly
                     })
+                    # --- End Correction ---
+
                     image_count += 1
-                except Exception as img_err: print(f"Error reading/encoding image {filename}: {img_err}. Skipping.")
-            print(f"Added {image_count} images.")
-        else: print("No image filenames provided.")
+                except Exception as img_err:
+                    print(f"Error reading/processing image {filename} for Gemini: {img_err}. Skipping.")
+            print(f"Added {image_count} images to Gemini prompt.")
+        else:
+            print("No image filenames provided for Gemini.")
 
-        conversation_history.append({"role": "user", "content": new_openai_message_content})
+        # --- Convert OpenAI history to Gemini format (remains the same) ---
+        gemini_history = []
+        # ... (history conversion code) ...
 
-        print(f"Sending request to OpenAI with {len(conversation_history)} messages...")
-        chat_completion = openai_client.chat.completions.create(
-            model="gpt-4o-mini", messages=conversation_history, max_tokens=1000
-        )
-        assistant_reply = chat_completion.choices[0].message.content
-        print(f"Received reply from OpenAI.")
+        # --- Initialize Gemini Model and Chat (remains the same) ---
+        model = genai.GenerativeModel('gemini-1.5-flash-latest')
+        chat = model.start_chat(history=gemini_history)
+
+        print(f"Sending request to Gemini with {len(prompt_parts)} parts...")
+
+        # --- Send message to Gemini (remains the same) ---
+        safety_settings = { # Optional safety settings
+            # ... (safety settings) ...
+        }
+        response = chat.send_message(prompt_parts, safety_settings=safety_settings)
+
+        assistant_reply = response.text
+        print("Received reply from Gemini.")
+
         return jsonify({"reply": assistant_reply})
 
+    # ... (exception handling remains the same) ...
+
     except Exception as e:
-        print(f"Error in /chat endpoint: {e}")
+        print(f"Error in /chat endpoint (Gemini): {e}")
         traceback.print_exc()
-        return jsonify({"error": f"An unexpected error occurred: {str(e)}"}), 500
-# --- End Existing Endpoints ---
+        # Try to provide a more specific error if possible
+        error_message = f"An unexpected error occurred with the AI chat: {str(e)}"
+        # Check for specific Google API errors if needed
+        # if isinstance(e, google.api_core.exceptions.GoogleAPIError):
+        #     error_message = f"Google API Error: {e}"
+        return jsonify({"error": error_message}), 500
+
+# --- End Chat Endpoint ---
 
 
 # --- Course Map Endpoints ---

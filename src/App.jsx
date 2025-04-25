@@ -100,25 +100,6 @@ function App() {
     navigate('/');
   };
 
-  // Optional: Effect to listen for storage changes in other tabs (advanced)
-  // useEffect(() => {
-  //   const handleStorageChange = (event) => {
-  //     if (event.key === USER_STORAGE_KEY) {
-  //       if (!event.newValue) { // User logged out in another tab
-  //         setUser(null);
-  //       } else { // User logged in/updated in another tab
-  //         try {
-  //           setUser(JSON.parse(event.newValue));
-  //         } catch {
-  //           setUser(null);
-  //         }
-  //       }
-  //     }
-  //   };
-  //   window.addEventListener('storage', handleStorageChange);
-  //   return () => window.removeEventListener('storage', handleStorageChange);
-  // }, []);
-
   return (
     <>
       {/* Navigation/Header remains the same */}
@@ -137,7 +118,6 @@ function App() {
             <GoogleLogin
               onSuccess={handleLoginSuccess}
               onError={handleLoginError}
-              useOneTap
             />
           )}
         </div>

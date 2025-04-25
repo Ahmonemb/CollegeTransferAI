@@ -112,10 +112,13 @@ function CourseMapFlow({ user }) { // user object now contains id, idToken, etc.
     // Try loading from cache first unless forcing refresh
     if (!forceRefresh) {
         const cachedList = loadFromCache(cacheKey);
-        if (cachedList) {
+        if (cachedList && Array.isArray(cachedList)) { // Added Array.isArray check for cache
             setMapList(cachedList);
             setIsMapListLoading(false);
             return cachedList;
+        } else if (cachedList) {
+            console.warn("Cached map list was not an array, removing:", cachedList);
+            removeFromCache(cacheKey); // Remove invalid cache
         }
     }
 
@@ -123,10 +126,19 @@ function CourseMapFlow({ user }) { // user object now contains id, idToken, etc.
     setIsMapListLoading(true);
     try {
       console.log("Fetching map list from API...");
-      const list = await fetchData('course-maps', {
+      const responseData = await fetchData('course-maps', { // Renamed 'list' to 'responseData'
         headers: { 'Authorization': `Bearer ${user.idToken}` }
       });
-      const validList = list || [];
+      console.log("Raw API response for map list:", responseData); // Log the raw response
+
+      // --- Added Check ---
+      // Ensure responseData is an array before setting state
+      const validList = Array.isArray(responseData) ? responseData : [];
+      if (!Array.isArray(responseData)) {
+          console.warn("API response for map list was not an array:", responseData);
+      }
+      // --- End Check ---
+
       setMapList(validList);
       saveToCache(cacheKey, validList); // Save fetched list to cache
       console.log("Map list fetched and cached:", validList);
@@ -165,18 +177,24 @@ function CourseMapFlow({ user }) { // user object now contains id, idToken, etc.
           'Authorization': `Bearer ${user.idToken}`,
           'Content-Type': 'application/json' // Good practice
         },
-        // Send the default name in the body
-        body: JSON.stringify({ map_name: mapName })
+        // --- Send map_name AND empty nodes/edges ---
+        body: JSON.stringify({
+            map_name: mapName,
+            nodes: [], // Always send empty nodes array for new map
+            edges: []  // Always send empty edges array for new map
+        })
+        // --- End Change ---
       });
 
+      // --- Response handling remains the same ---
       if (newMapData && newMapData.map_id) {
         console.log("New map record created:", newMapData);
 
         // 1. Update Map List State & Cache
         const newMapEntry = {
           map_id: newMapData.map_id,
-          map_name: newMapData.map_name,
-          last_updated: newMapData.last_updated
+          map_name: newMapData.map_name || mapName, // Use returned name or prompted name
+          last_updated: newMapData.last_updated || new Date().toISOString() // Use returned date or now
         };
         setMapList(prevList => {
           const newList = [newMapEntry, ...prevList];
@@ -190,7 +208,7 @@ function CourseMapFlow({ user }) { // user object now contains id, idToken, etc.
         setNodes(defaultNodes); // Reset nodes/edges for the new map
         setEdges(defaultEdges);
         setCurrentMapId(newMapData.map_id); // Set the new ID
-        setCurrentMapName(newMapData.map_name); // Set the name
+        setCurrentMapName(newMapEntry.map_name); // Set the name from newMapEntry
         idCounter = 0; // Reset node counter
 
         // 3. Update Specific Map Cache (optional but good practice)
@@ -199,8 +217,8 @@ function CourseMapFlow({ user }) { // user object now contains id, idToken, etc.
             nodes: defaultNodes,
             edges: defaultEdges,
             map_id: newMapData.map_id,
-            map_name: newMapData.map_name,
-            last_updated: newMapData.last_updated
+            map_name: newMapEntry.map_name,
+            last_updated: newMapEntry.last_updated
         });
 
         setSaveStatus("New map created.");
@@ -209,6 +227,7 @@ function CourseMapFlow({ user }) { // user object now contains id, idToken, etc.
       } else {
         throw new Error("Failed to create map record: Invalid response from server.");
       }
+      // --- End Response handling ---
 
     } catch (error) {
       console.error("Failed to create new map:", error);
@@ -230,6 +249,7 @@ function CourseMapFlow({ user }) { // user object now contains id, idToken, etc.
       setCurrentMapName('Untitled Map');
       idCounter = 0;
       setIsLoading(false);
+      setSaveStatus(''); // Clear any previous status
       return;
     }
 
@@ -406,24 +426,22 @@ function CourseMapFlow({ user }) { // user object now contains id, idToken, etc.
       setSaveStatus(`Error saving map: ${error.message}`);
     }
   }, [userId, user?.idToken, nodes, edges, currentMapId, currentMapName, loadMapList, setMapList]); // Added setMapList dependency
-
-  // --- Handle New Map ---
   
 
   // --- Handle Map Selection Change ---
   const handleMapSelectChange = (event) => {
     const selectedId = event.target.value;
     if (selectedId === "__NEW__") {
-        // Call handleNewMap which now includes the prompt
-        handleNewMap();
+        console.log("Selected [Untitled Map], resetting view.");
+        loadSpecificMap(null);
     } else {
         // Load existing map (check cache first)
         loadSpecificMap(selectedId);
     }
   };
 
-  // --- Handle Delete Map ---
-  const handleDeleteMap = useCallback(async () => {
+    // --- Handle Delete Map ---
+    const handleDeleteMap = useCallback(async () => {
       if (!currentMapId || !userId || !user?.idToken) {
           setSaveStatus("No map selected to delete or not logged in.");
           return;
@@ -435,40 +453,65 @@ function CourseMapFlow({ user }) { // user object now contains id, idToken, etc.
 
       const mapToDeleteId = currentMapId; // Capture ID before state changes
       const mapCacheKey = getCacheKey('courseMap', userId, mapToDeleteId);
+      const listCacheKey = getCacheKey('courseMapList', userId); // Cache key for the list
 
-      // --- Add Logging ---
       console.log(`[Delete Attempt] User ID: ${userId}, Map ID: ${mapToDeleteId}`);
-      // --- End Logging ---
-
       setSaveStatus("Deleting...");
-      console.log(`Attempting to delete map: ${currentMapId}`);
 
       try {
-          await fetchData(`course-map/${mapToDeleteId}`, { // Ensure mapToDeleteId is correct here
+          // --- Call Backend DELETE ---
+          await fetchData(`course-map/${mapToDeleteId}`, {
               method: 'DELETE',
               headers: {
                   'Authorization': `Bearer ${user.idToken}`
               }
           });
+          // --- Backend Delete Successful ---
 
-          console.log("Map deleted successfully.");
+          console.log("Map deleted successfully from backend.");
           setSaveStatus("Map deleted.");
-          removeFromCache(mapCacheKey); // <-- Used here
-          // Load the list again and load the next available map (or new)
-          loadMapList().then((list) => {
-              if (list && list.length > 0) {
-                  loadSpecificMap(list[0].map_id); // Load most recent
-              } else {
-                  handleNewMap(); // No maps left, create new
+
+          // --- Frontend Cleanup ---
+          // 1. Remove from specific map cache
+          removeFromCache(mapCacheKey);
+
+          // 2. Update mapList state and list cache
+          let nextMapIdToLoad = null;
+          setMapList(prevList => {
+              const newList = prevList.filter(map => map.map_id !== mapToDeleteId);
+              // Determine which map to load next (e.g., the first one in the updated list)
+              if (newList.length > 0) {
+                  newList.sort((a, b) => new Date(b.last_updated) - new Date(a.last_updated)); // Re-sort just in case
+                  nextMapIdToLoad = newList[0].map_id;
               }
+              saveToCache(listCacheKey, newList); // Update list cache
+              return newList;
           });
-            setTimeout(() => setSaveStatus(''), 2000);
+
+          // 3. Load the next map (or reset if list is empty)
+          if (nextMapIdToLoad) {
+              loadSpecificMap(nextMapIdToLoad);
+          } else {
+              // No maps left, reset to a new, unsaved state
+              setNodes(defaultNodes);
+              setEdges(defaultEdges);
+              setCurrentMapId(null);
+              setCurrentMapName('Untitled Map');
+              idCounter = 0;
+              // Optionally, call handleNewMap() if you want to immediately prompt for a name
+              // handleNewMap();
+          }
+          // --- End Frontend Cleanup ---
+
+          setTimeout(() => setSaveStatus(''), 2000);
 
       } catch (error) {
           console.error(`[Delete Failed] User ID: ${userId}, Map ID: ${mapToDeleteId}`, error);
           setSaveStatus(`Error deleting map: ${error.message}`);
+          // Optionally, force refresh the list from API on error to ensure consistency
+          loadMapList(true);
       }
-  }, [userId, user?.idToken, currentMapId, currentMapName, loadMapList, loadSpecificMap, handleNewMap]);
+  }, [userId, user?.idToken, currentMapId, currentMapName, loadMapList, loadSpecificMap, setMapList, setNodes, setEdges]); // Added setMapList, setNodes, setEdges
 
 
   // --- Other Callbacks (onConnect, addNode, startEditing, handleEditChange, saveEdit, onPaneClick) remain the same ---
@@ -531,7 +574,7 @@ function CourseMapFlow({ user }) { // user object now contains id, idToken, etc.
 
         <label htmlFor="map-select" style={{fontWeight: 'bold'}}>Load Map:</label>
         <select id="map-select" value={currentMapId || "__NEW__"} onChange={handleMapSelectChange} style={{maxWidth: '250px', padding: '5px'}}>
-            <option value="__NEW__">{currentMapName}</option>
+            <option value="__NEW__">[Untitled Map]</option>
             {mapList.map(map => (
                 <option key={map.map_id} value={map.map_id}>
                     {map.map_name} ({new Date(map.last_updated).toLocaleDateString()})
