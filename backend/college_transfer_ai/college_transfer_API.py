@@ -216,5 +216,3 @@ class CollegeTransferAPI:
 
 
 api = CollegeTransferAPI()
-
-# print(json.dumps(api.get_major_from_key("75/125/to/1/Major/d5469a2c-be7e-452b-b492-08dca4e7496b"), indent=4))

@@ -8,3 +8,4 @@ pytest
 PyMuPDF
 openai
 dotenv
+google-generativeai
