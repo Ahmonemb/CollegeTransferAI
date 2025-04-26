@@ -151,6 +151,7 @@ def get_all_majors():
         return jsonify({"error": "Missing required parameters (sendingInstitutionId, receivingInstitutionId, academicYearId, categoryCode)"}), 400
     try:
         majors = api.get_all_majors(sending_institution_id, receiving_institution_id, academic_year_id, category_code)
+        print(majors)
         return jsonify(majors)
     except Exception as e:
         print(f"Error in /majors: {e}")

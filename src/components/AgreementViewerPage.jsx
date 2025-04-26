@@ -56,7 +56,7 @@ function AgreementViewerPage() {
         // Generate a unique cache key for this combination (initially for major)
         const cacheKey = `majors-${sendingId}-${receivingId}-${yearId}`;
         let cachedMajors = null;
-
+        
         // 1. Try loading from localStorage
         try {
             const cachedData = localStorage.getItem(cacheKey);
@@ -89,32 +89,33 @@ function AgreementViewerPage() {
             }
         };
 
+        let triedDept = false; // Flag to track if dept was attempted
+
         fetchMajors('major')
             .then(majorData => {
-                console.log("Initial fetch (major) returned:", majorData); // Add for debugging
-                // Check if the first fetch returned null, undefined, OR an empty object
+                console.log("Initial fetch (major) returned:", majorData);
                 if (majorData === null || typeof majorData === 'undefined' || (typeof majorData === 'object' && Object.keys(majorData).length === 0)) {
                     console.log("Major data was null, undefined, or empty object. Trying category: dept");
-                    // Retry with 'dept'
-                    return fetchMajors('dept'); // Return the promise for the second fetch
+                    triedDept = true; // Set the flag
+                    return fetchMajors('dept');
                 } else {
-                    // First fetch was successful and has data, return its data
                     console.log("Using data from 'major' category.");
                     return majorData;
                 }
             })
             .then(finalData => {
-                // *** ADD LOG HERE ***
-                console.log("Processing finalData (from major or dept):", finalData);
+                // Log which attempt produced this data
+                console.log(`Processing finalData (from ${triedDept ? 'dept' : 'major'} attempt):`, finalData);
 
                 if (finalData && Object.keys(finalData).length === 0) {
-                    console.log("Setting error: No majors or departments found..."); // Log before setting error
+                    // This condition implies triedDept must be true if majorData was empty initially
+                    console.log(`Setting error: No majors or departments found (result from ${triedDept ? 'dept' : 'major'} attempt).`);
                     setError("No majors or departments found for the selected combination.");
                     setMajors({});
                 } else if (finalData) {
-                    console.log("Setting majors data:", finalData); // Log before setting state
+                    console.log(`Setting majors data (from ${triedDept ? 'dept' : 'major'} attempt):`, finalData);
                     setMajors(finalData);
-                    setError(null); // Clear any previous error if data is found
+                    setError(null);
                     // Cache the successful result (regardless of which category worked)
                     try {
                         localStorage.setItem(cacheKey, JSON.stringify(finalData));
@@ -123,7 +124,7 @@ function AgreementViewerPage() {
                         console.error("Failed to save final majors/depts data to cache:", e);
                     }
                 } else {
-                    console.log("Setting error: Received unexpected empty response."); // Log before setting error
+                     console.log(`Setting error: Received unexpected empty response (from ${triedDept ? 'dept' : 'major'} attempt).`);
                     setError("Received unexpected empty response when fetching majors/departments.");
                     setMajors({});
                 }

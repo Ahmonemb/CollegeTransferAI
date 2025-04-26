@@ -64,12 +64,11 @@ class CollegeTransferAPI:
                 if idx == "Id" and value == id:
                     return str(k["FallYear"]) + "-" + str(k["FallYear"] + 1)
                 
-    def get_all_majors(self, sending_institution_id, receiving_institution_id, academic_year_id, category_code="major"):
+    def get_all_majors(self, sending_institution_id, receiving_institution_id, academic_year_id, category_code):
         # Define the parameters
         # sending_institution_id = 61
         # receiving_institution_id = 79
         # academic_year_id = 75
-        category_code = "major"
 
         # Define the API endpoint and parameters
 
@@ -114,8 +113,6 @@ class CollegeTransferAPI:
             category_code = "dept"
 
         url = f"https://assist.org/api/agreements?receivingInstitutionId={receiving_institution_id}&sendingInstitutionId={sending_institution_id}&academicYearId={academic_year_id}&categoryCode={category_code}"
-
-        print(url)
 
         result = requests.get(url)
 
