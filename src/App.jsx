@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Routes, Route, Link, useNavigate } from 'react-router-dom';
+// Import useNavigate
+import { Routes, Route, useNavigate } from 'react-router-dom';
 import { GoogleLogin, googleLogout } from '@react-oauth/google';
 import { jwtDecode } from "jwt-decode";
 import CollegeTransferForm from './components/CollegeTransferForm';
@@ -46,7 +47,7 @@ function App() {
     return null; // Default to null
   });
 
-  const navigate = useNavigate();
+  const navigate = useNavigate(); // Get navigate function
 
   // Function to handle successful login
   const handleLoginSuccess = (credentialResponse) => {
@@ -105,19 +106,39 @@ function App() {
       {/* Navigation/Header remains the same */}
       <nav style={{ padding: '10px 20px', backgroundColor: '#eee', borderBottom: '1px solid #ccc', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
-          <Link to="/" style={{ marginRight: '15px' }}>Home</Link>
-          {user && <Link to="/course-map">Course Map</Link>}
+          {/* Replace Link with button and onClick */}
+          <button 
+            onClick={() => navigate('/')} 
+            className="btn btn-primary" 
+            style={{ marginRight: '15px' }} // Keep margin separate if needed
+          >
+            Home
+          </button>
+          {/* Replace Link with button and onClick */}
+          <button 
+            onClick={() => navigate('/course-map')}
+            className="btn btn-secondary"
+          >
+            Course Map
+          </button>
         </div>
         <div>
           {user ? (
             <>
               <span style={{ marginRight: '10px', fontSize: '0.9em' }}>Welcome, {user.name || user.email}!</span>
-              <button onClick={handleLogout}>Logout</button>
+              {/* Style the logout button similarly */}
+              <button 
+                onClick={handleLogout}
+                className="btn btn-danger"
+              >
+                Logout
+              </button>
             </>
           ) : (
             <GoogleLogin
               onSuccess={handleLoginSuccess}
               onError={handleLoginError}
+              // Note: Styling the GoogleLogin button directly might require specific props or wrapper elements
             />
           )}
         </div>
@@ -132,7 +153,8 @@ function App() {
         />
         <Route
           path="/course-map"
-          element={user ? <CourseMap user={user} /> : <p>Please log in to view the course map.</p>}
+          // Always render CourseMap, pass user (null if not logged in)
+          element={<CourseMap user={user} />}
         />
       </Routes>
     </>

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { useParams, Link } from 'react-router-dom';
+// Import useNavigate and remove Link if no longer needed
+import { useParams, useNavigate } from 'react-router-dom'; 
 import { fetchData } from '../services/api';
 import PdfViewer from './PdfViewer';
 import ChatInterface from './ChatInterface';
@@ -12,6 +13,7 @@ const fixedMajorsWidth = 300; // Revert to fixed width for majors
 
 function AgreementViewerPage() {
     const { sendingId, receivingId, yearId } = useParams();
+    const navigate = useNavigate(); // Get navigate function
 
     // --- State for resizing ---
     // Only need state for the chat column width now
@@ -51,7 +53,7 @@ function AgreementViewerPage() {
             return;
         }
 
-        // Generate a unique cache key for this combination
+        // Generate a unique cache key for this combination (initially for major)
         const cacheKey = `majors-${sendingId}-${receivingId}-${yearId}`;
         let cachedMajors = null;
 
@@ -71,35 +73,70 @@ function AgreementViewerPage() {
             localStorage.removeItem(cacheKey); // Clear potentially corrupted cache entry
         }
 
-        // 2. If not cached or cache failed, fetch from API
-        console.log("Fetching majors from API:", cacheKey);
+        // 2. Fetch from API (try 'major' first)
+        console.log("Fetching majors (category: major) from API:", cacheKey);
         setIsLoadingMajors(true);
         setError(null);
-        fetchData(`majors?sendingInstitutionId=${sendingId}&receivingInstitutionId=${receivingId}&academicYearId=${yearId}&categoryCode=major`)
-            .then(data => {
-                if (data && Object.keys(data).length === 0) { // Check if data is not null/undefined before checking keys
-                    setError("No majors found for the selected combination.");
+
+        const fetchMajors = async (category) => {
+            try {
+                const data = await fetchData(`majors?sendingInstitutionId=${sendingId}&receivingInstitutionId=${receivingId}&academicYearId=${yearId}&categoryCode=${category}`);
+                return data; // Return the fetched data
+            } catch (err) {
+                console.error(`Error fetching majors (category: ${category}):`, err);
+                // Throw the error to be caught by the main catch block
+                throw new Error(`Failed to load majors (category: ${category}): ${err.message}`);
+            }
+        };
+
+        fetchMajors('major')
+            .then(majorData => {
+                console.log("Initial fetch (major) returned:", majorData); // Add for debugging
+                // Check if the first fetch returned null, undefined, OR an empty object
+                if (majorData === null || typeof majorData === 'undefined' || (typeof majorData === 'object' && Object.keys(majorData).length === 0)) {
+                    console.log("Major data was null, undefined, or empty object. Trying category: dept");
+                    // Retry with 'dept'
+                    return fetchMajors('dept'); // Return the promise for the second fetch
+                } else {
+                    // First fetch was successful and has data, return its data
+                    console.log("Using data from 'major' category.");
+                    return majorData;
+                }
+            })
+            .then(finalData => {
+                // *** ADD LOG HERE ***
+                console.log("Processing finalData (from major or dept):", finalData);
+
+                if (finalData && Object.keys(finalData).length === 0) {
+                    console.log("Setting error: No majors or departments found..."); // Log before setting error
+                    setError("No majors or departments found for the selected combination.");
                     setMajors({});
-                } else if (data) { // Check if data is not null/undefined
-                    setMajors(data);
+                } else if (finalData) {
+                    console.log("Setting majors data:", finalData); // Log before setting state
+                    setMajors(finalData);
+                    setError(null); // Clear any previous error if data is found
+                    // Cache the successful result (regardless of which category worked)
                     try {
-                        localStorage.setItem(cacheKey, JSON.stringify(data));
-                        console.log("Saved majors to cache:", cacheKey);
+                        localStorage.setItem(cacheKey, JSON.stringify(finalData));
+                        console.log("Saved final majors/depts data to cache:", cacheKey);
                     } catch (e) {
-                        console.error("Failed to save majors to cache:", e);
+                        console.error("Failed to save final majors/depts data to cache:", e);
                     }
                 } else {
-                     // Handle cases where fetchData might return null or undefined unexpectedly
-                     setError("Received unexpected empty response when fetching majors.");
-                     setMajors({});
+                    console.log("Setting error: Received unexpected empty response."); // Log before setting error
+                    setError("Received unexpected empty response when fetching majors/departments.");
+                    setMajors({});
                 }
             })
             .catch(err => {
-                console.error("Error fetching majors:", err);
-                setError(`Failed to load majors: ${err.message}`);
+                // *** ADD LOG HERE ***
+                console.error("Caught error in majors fetch chain:", err);
+                setError(err.message || "An error occurred fetching majors/departments.");
                 setMajors({});
             })
             .finally(() => {
+                // *** ADD LOG HERE ***
+                console.log("Majors fetch chain finally block executing.");
                 setIsLoadingMajors(false);
             });
 
@@ -181,29 +218,6 @@ function AgreementViewerPage() {
         }
     };
 
-    // Filter majors based on search term
-    const filteredMajors = useMemo(() => {
-        const lowerCaseSearchTerm = majorSearchTerm.toLowerCase();
-        // Ensure majors is an object before trying to get entries
-        if (typeof majors !== 'object' || majors === null) {
-            return [];
-        }
-        return Object.entries(majors).filter(([name]) =>
-            name.toLowerCase().includes(lowerCaseSearchTerm)
-        );
-    }, [majors, majorSearchTerm]);
-
-    // --- Resizing Logic (Simplified for one divider) ---
-    const handleMouseDown = useCallback((e) => {
-        e.preventDefault();
-        isResizingRef.current = true;
-        // Add the *same* memoized handleMouseMove function as the listener
-        window.addEventListener('mousemove', handleMouseMove);
-        window.addEventListener('mouseup', handleMouseUp);
-        document.body.style.cursor = 'col-resize';
-        document.body.style.userSelect = 'none';
-    }, []); // handleMouseMove is stable now, so no need to list it if it doesn't change
-
     const handleMouseMove = useCallback((e) => { // Keep useCallback, but dependencies change
         if (!isResizingRef.current || !containerRef.current) {
             return;
@@ -246,6 +260,33 @@ function AgreementViewerPage() {
         }
     // Ensure handleMouseMove is included if it's used inside, though it's stable now
     }, [handleMouseMove]);
+
+    // Filter majors based on search term
+    const filteredMajors = useMemo(() => {
+        const lowerCaseSearchTerm = majorSearchTerm.toLowerCase();
+        // Ensure majors is an object before trying to get entries
+        if (typeof majors !== 'object' || majors === null) {
+            return [];
+        }
+        return Object.entries(majors).filter(([name]) =>
+            name.toLowerCase().includes(lowerCaseSearchTerm)
+        );
+    }, [majors, majorSearchTerm]);
+
+    // --- Resizing Logic (Simplified for one divider) ---
+    const handleMouseDown = useCallback((e) => {
+        e.preventDefault();
+        isResizingRef.current = true;
+        // Add the *same* memoized handleMouseMove function as the listener
+        window.addEventListener('mousemove', handleMouseMove);
+        window.addEventListener('mouseup', handleMouseUp);
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+    }, [handleMouseMove, handleMouseUp]); // handleMouseMove is stable now, so no need to list it if it doesn't change
+
+    
+
+    
 
     // Cleanup listeners
     useEffect(() => {
@@ -294,7 +335,13 @@ function AgreementViewerPage() {
                 <button onClick={toggleMajorsVisibility} style={{ marginRight: '2em' }}>
                     {isMajorsVisible ? 'Hide Majors' : 'Show Majors'}
                 </button>
-                 <Link to="/">Back to Form</Link>
+                 {/* Replace Link with button and onClick */}
+                 <button 
+                    onClick={() => navigate('/')} 
+                    className="btn btn-secondary" 
+                 >
+                    Back to Form
+                 </button>
             </div>
 
             {/* Main container using Flexbox */}

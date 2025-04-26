@@ -1,12 +1,13 @@
 // filepath: c:\Users\notto\Desktop\Desktop\Projects\CollegeTransferAI\src\components\CourseMap.jsx
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react'; // Added useMemo
 import ReactFlow, {
   Controls, Background, addEdge, MiniMap, BackgroundVariant,
   ReactFlowProvider, useReactFlow, useNodesState, useEdgesState,
+  Position // Import Position
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { fetchData } from '../services/api';
-
+import CustomCourseNode from './CustomCourseNode'; // Import the custom node
 
 // --- Default/Initial Data (used for NEW maps) ---
 const defaultNodes = []; // Start new maps empty
@@ -81,7 +82,7 @@ const removeFromCache = (key) => {
 // --- End Helper Functions for Cache ---
 
 
-function CourseMapFlow({ user }) { // user object now contains id, idToken, etc.
+function CourseMapFlow({ user }) { // user object now contains id, idToken, etc. or is null
   const reactFlowWrapper = useRef(null);
   const { screenToFlowPosition } = useReactFlow();
   const [nodes, setNodes, onNodesChange] = useNodesState(defaultNodes);
@@ -98,12 +99,15 @@ function CourseMapFlow({ user }) { // user object now contains id, idToken, etc.
   const [isMapListLoading, setIsMapListLoading] = useState(true);
   // --- End State for Multiple Maps ---
 
+  const isLoggedIn = !!user; // Check if user object exists
+
   const userId = user?.id; // Get user ID for cache keys
 
   // --- Load Map List (with Cache) ---
   const loadMapList = useCallback(async (forceRefresh = false) => {
     const cacheKey = getCacheKey('courseMapList', userId);
-    if (!userId) {
+    // If not logged in, don't attempt to load or cache user-specific lists
+    if (!isLoggedIn) {
         setMapList([]);
         setIsMapListLoading(false);
         return [];
@@ -152,11 +156,12 @@ function CourseMapFlow({ user }) { // user object now contains id, idToken, etc.
     } finally {
       setIsMapListLoading(false);
     }
-  }, [userId, user?.idToken]); // Depend on userId and token
+  }, [userId, user?.idToken, isLoggedIn]); // Add isLoggedIn dependency
 
   const handleNewMap = useCallback(async () => {
-    if (!userId || !user?.idToken) {
-      setSaveStatus("Please log in to create a map.");
+    // Check isLoggedIn first
+    if (!isLoggedIn) {
+      setSaveStatus("Please log in to create a new map.");
       return;
     }
 
@@ -236,11 +241,23 @@ function CourseMapFlow({ user }) { // user object now contains id, idToken, etc.
     } finally {
       setIsLoading(false); // Hide loading state
     }
-  }, [userId, user?.idToken, setNodes, setEdges, setMapList]); // Added setMapList dependency
+  }, [userId, user?.idToken, setNodes, setEdges, setMapList, isLoggedIn]); // Add isLoggedIn dependency
 
   // --- Load Specific Map (with Cache) ---
   const loadSpecificMap = useCallback(async (mapId, forceRefresh = false) => {
     const cacheKey = getCacheKey('courseMap', userId, mapId);
+
+    // If not logged in, always show the default empty state
+    if (!isLoggedIn) {
+      setNodes(defaultNodes);
+      setEdges(defaultEdges);
+      setCurrentMapId(null);
+      setCurrentMapName('Untitled Map');
+      idCounter = 0;
+      setIsLoading(false);
+      setSaveStatus(''); // Clear any previous status
+      return;
+    }
 
     if (!userId || !mapId) { // Handle new map case
       setNodes(defaultNodes);
@@ -260,7 +277,11 @@ function CourseMapFlow({ user }) { // user object now contains id, idToken, etc.
     if (!forceRefresh) {
         const cachedMap = loadFromCache(cacheKey);
         if (cachedMap && cachedMap.nodes && cachedMap.edges) {
-            setNodes(cachedMap.nodes);
+            const loadedNodes = cachedMap.nodes.map(node => ({
+                ...node,
+                type: node.type || 'courseNode' // Assign 'courseNode' if type is missing or default
+            }));
+            setNodes(loadedNodes);
             setEdges(cachedMap.edges);
             setCurrentMapId(cachedMap.map_id);
             setCurrentMapName(cachedMap.map_name || 'Untitled Map');
@@ -281,7 +302,11 @@ function CourseMapFlow({ user }) { // user object now contains id, idToken, etc.
       });
       if (data && data.nodes && data.edges) {
         console.log("Loaded map data from API:", data);
-        setNodes(data.nodes);
+        const loadedNodes = data.nodes.map(node => ({
+            ...node,
+            type: node.type || 'courseNode' // Assign 'courseNode' if type is missing or default
+        }));
+        setNodes(loadedNodes);
         setEdges(data.edges);
         setCurrentMapId(data.map_id);
         setCurrentMapName(data.map_name || 'Untitled Map');
@@ -304,27 +329,31 @@ function CourseMapFlow({ user }) { // user object now contains id, idToken, etc.
     } finally {
       setIsLoading(false);
     }
-  }, [userId, user?.idToken, setNodes, setEdges, handleNewMap]); // Added handleNewMap dependency
+  }, [userId, user?.idToken, setNodes, setEdges, handleNewMap, isLoggedIn]); // Add isLoggedIn dependency
 
   // --- Initial Load Effect ---
   useEffect(() => {
     setIsLoading(true); // Set loading true initially
-    loadMapList().then((list) => {
-      // After loading the list, decide which map to load
-      if (list && list.length > 0) {
-        // Load the most recently updated map by default
-        loadSpecificMap(list[0].map_id);
-      } else {
-        // No saved maps, start with a new one
-        loadSpecificMap(null); // This will reset to default empty state
-      }
-    });
-  }, [loadMapList, loadSpecificMap]); // Depend on the loading functions
+    // If logged in, load the list and then the appropriate map
+    if (isLoggedIn) {
+        loadMapList().then((list) => {
+            if (list && list.length > 0) {
+                loadSpecificMap(list[0].map_id);
+            } else {
+                loadSpecificMap(null); // Load empty state if no maps found
+            }
+        });
+    } else {
+        // If not logged in, just load the empty state directly
+        loadSpecificMap(null);
+    }
+  }, [loadMapList, loadSpecificMap, isLoggedIn]); // Add isLoggedIn dependency
 
   // --- Save Map Data (Create or Update) ---
   const handleSave = useCallback(async () => {
-    if (!userId || !user?.idToken) {
-      setSaveStatus("Please log in to save.");
+    // Check isLoggedIn first
+    if (!isLoggedIn) {
+      setSaveStatus("Please log in to save changes.");
       return;
     }
     setSaveStatus("Saving...");
@@ -425,11 +454,16 @@ function CourseMapFlow({ user }) { // user object now contains id, idToken, etc.
       console.error("Failed to save course map:", error);
       setSaveStatus(`Error saving map: ${error.message}`);
     }
-  }, [userId, user?.idToken, nodes, edges, currentMapId, currentMapName, loadMapList, setMapList]); // Added setMapList dependency
+  }, [userId, user?.idToken, nodes, edges, currentMapId, currentMapName, loadMapList, setMapList, isLoggedIn]); // Add isLoggedIn dependency
   
 
   // --- Handle Map Selection Change ---
   const handleMapSelectChange = (event) => {
+    // If not logged in, selecting anything should just show the empty map
+    if (!isLoggedIn) {
+        loadSpecificMap(null);
+        return;
+    }
     const selectedId = event.target.value;
     if (selectedId === "__NEW__") {
         console.log("Selected [Untitled Map], resetting view.");
@@ -442,6 +476,12 @@ function CourseMapFlow({ user }) { // user object now contains id, idToken, etc.
 
     // --- Handle Delete Map ---
     const handleDeleteMap = useCallback(async () => {
+      // Check isLoggedIn first
+      if (!isLoggedIn) {
+          setSaveStatus("Please log in to delete maps.");
+          return;
+      }
+
       if (!currentMapId || !userId || !user?.idToken) {
           setSaveStatus("No map selected to delete or not logged in.");
           return;
@@ -511,22 +551,29 @@ function CourseMapFlow({ user }) { // user object now contains id, idToken, etc.
           // Optionally, force refresh the list from API on error to ensure consistency
           loadMapList(true);
       }
-  }, [userId, user?.idToken, currentMapId, currentMapName, loadMapList, loadSpecificMap, setMapList, setNodes, setEdges]); // Added setMapList, setNodes, setEdges
+  }, [userId, user?.idToken, currentMapId, currentMapName, loadMapList, loadSpecificMap, setMapList, setNodes, setEdges, isLoggedIn]); // Add isLoggedIn dependency
 
 
   // --- Other Callbacks (onConnect, addNode, startEditing, handleEditChange, saveEdit, onPaneClick) remain the same ---
    const onConnect = useCallback((connection) => {
+       // Allow connecting nodes even when not logged in
        const newEdge = { ...connection, label: 'Prereq' };
        setEdges((eds) => addEdge(newEdge, eds));
      }, [setEdges]);
 
    const addNode = useCallback(() => {
+     // Allow adding nodes even when not logged in
      const newNodeId = getUniqueNodeId();
      const position = screenToFlowPosition({
        x: reactFlowWrapper.current.clientWidth / 2,
        y: reactFlowWrapper.current.clientHeight / 3,
      });
-     const newNode = { id: newNodeId, position, data: { label: `New Course ${idCounter}` } };
+     const newNode = {
+       id: newNodeId,
+       type: 'courseNode', // Specify the custom node type here
+       position,
+       data: { label: `New Course ${idCounter}` }
+     };
      setNodes((nds) => nds.concat(newNode));
    }, [screenToFlowPosition, setNodes]);
 
@@ -554,42 +601,69 @@ function CourseMapFlow({ user }) { // user object now contains id, idToken, etc.
    const onPaneClick = useCallback(() => saveEdit(), [saveEdit]);
   // --- End Other Callbacks ---
 
+  // --- Define Node Types ---
+  // Use useMemo to prevent this object from being recreated on every render
+  const nodeTypes = useMemo(() => ({
+      courseNode: CustomCourseNode, // Map 'courseNode' type to your component
+      // You can add other custom node types here if needed
+  }), []);
+
   // Render loading state for the whole map area
   if (isMapListLoading || isLoading) {
-    return <p>Loading course maps...</p>;
+    // Show loading only if logged in and actually loading data
+    if (isLoggedIn) {
+        return <p>Loading course maps...</p>;
+    }
+    // If not logged in, loading is instant (just showing default state)
+    // so don't show loading message, let the component render below.
   }
 
   return (
     <div style={{ height: 'calc(100vh - 60px)', width: '100%', border: '1px solid #ccc', position: 'relative' }} ref={reactFlowWrapper}>
       {editingElement && <EditInput element={editingElement} value={editValue} onChange={handleEditChange} onSave={saveEdit} />}
 
+      {/* --- Login Required Note --- */}
+      {!isLoggedIn && (
+        <div style={{ padding: '10px', background: '#fff3cd', color: '#856404', borderBottom: '1px solid #ffeeba', textAlign: 'center', fontWeight: 'bold' }}>
+          Please log in to save your course map or access saved maps.
+        </div>
+      )}
+
       {/* --- Map Management Bar --- */}
       <div style={{ padding: '10px', borderBottom: '1px solid #eee', display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap', background: '#f8f8f8' }}>
         {/* Display the current map name */}
         <span style={{fontWeight: 'bold'}}>Editing:</span>
-        <span style={{ fontStyle: currentMapId ? 'normal' : 'italic' }}>
-            {currentMapName} {currentMapId ? '' : '(unsaved)'}
+        <span style={{ fontStyle: currentMapId || !isLoggedIn ? 'italic' : 'normal' }}>
+            {currentMapName} {currentMapId || !isLoggedIn ? '(unsaved)' : ''}
         </span>
         <span style={{margin: '0 5px'}}>|</span> {/* Separator */}
 
         <label htmlFor="map-select" style={{fontWeight: 'bold'}}>Load Map:</label>
-        <select id="map-select" value={currentMapId || "__NEW__"} onChange={handleMapSelectChange} style={{maxWidth: '250px', padding: '5px'}}>
+        <select
+            id="map-select"
+            value={currentMapId || "__NEW__"}
+            onChange={handleMapSelectChange}
+            style={{maxWidth: '250px', padding: '5px'}}
+            disabled={!isLoggedIn} // Disable dropdown if not logged in
+            title={!isLoggedIn ? "Log in to load saved maps" : ""}
+        >
             <option value="__NEW__">[Untitled Map]</option>
-            {mapList.map(map => (
+            {isLoggedIn && mapList.map(map => ( // Only show list if logged in
                 <option key={map.map_id} value={map.map_id}>
                     {map.map_name} ({new Date(map.last_updated).toLocaleDateString()})
                 </option>
             ))}
         </select>
-        <button onClick={handleNewMap}>New Map</button>
-        <button onClick={handleSave} disabled={saveStatus === "Saving..."} title="Save the current map">Save</button>
-        <button onClick={handleDeleteMap} disabled={!currentMapId || saveStatus === "Deleting..."} title="Delete the currently selected map">Delete</button>
+        <button onClick={handleNewMap} disabled={!isLoggedIn || saveStatus === "Creating new map..."} title={!isLoggedIn ? "Log in to create a new map" : "Create a new map"}>New Map</button>
+        <button onClick={handleSave} disabled={!isLoggedIn || saveStatus === "Saving..."} title={!isLoggedIn ? "Log in to save changes" : "Save the current map"}>Save</button>
+        <button onClick={handleDeleteMap} disabled={!isLoggedIn || !currentMapId || saveStatus === "Deleting..."} title={!isLoggedIn ? "Log in to delete maps" : "Delete the currently selected map"}>Delete</button>
 
-        {saveStatus && <span style={{ fontSize: '0.9em', color: saveStatus.startsWith('Error') ? 'red' : 'green' }}>{saveStatus}</span>}
+        {saveStatus && <span style={{ fontSize: '0.9em', color: saveStatus.startsWith('Error') ? 'red' : (saveStatus.includes('log in') ? 'orange' : 'green') }}>{saveStatus}</span>}
       </div>
       {/* --- End Map Management Bar --- */}
 
       {/* --- Instructions Bar --- */}
+      {/* Instructions are always visible */}
       <div style={{ padding: '5px 10px', borderBottom: '1px solid #eee', display: 'flex', gap: '15px', alignItems: 'center', flexWrap: 'wrap', fontSize: '0.9em', color: '#555' }}>
         <button onClick={addNode} title="Add a new course node to the map">Add Course</button>
         <span>| Double-click to rename | Select + Backspace/Delete to remove | Drag handles to connect</span>
@@ -601,6 +675,8 @@ function CourseMapFlow({ user }) { // user object now contains id, idToken, etc.
         onConnect={onConnect} onNodeDoubleClick={onNodeDoubleClick} onEdgeDoubleClick={onEdgeDoubleClick}
         onPaneClick={onPaneClick} fitView attributionPosition="bottom-left"
         deleteKeyCode={['Backspace', 'Delete']} nodesDraggable={true} nodesConnectable={true} elementsSelectable={true}
+        nodeTypes={nodeTypes} // Pass the nodeTypes object here
+        // Prevent interaction if loading user data? Maybe not necessary.
       >
         <Controls />
         <Background variant={BackgroundVariant.Dots} gap={12} size={1} />
@@ -615,9 +691,10 @@ function CourseMapFlow({ user }) { // user object now contains id, idToken, etc.
 }
 
 // Wrap with Provider
-export default function CourseMap({ user }) {
+export default function CourseMap({ user }) { // Receive user prop
   return (
     <ReactFlowProvider>
+      {/* Pass user down to the actual flow component */}
       <CourseMapFlow user={user} />
     </ReactFlowProvider>
   );

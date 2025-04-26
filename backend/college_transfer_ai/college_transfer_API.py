@@ -69,7 +69,7 @@ class CollegeTransferAPI:
         # sending_institution_id = 61
         # receiving_institution_id = 79
         # academic_year_id = 75
-        # category_code = "major"
+        category_code = "major"
 
         # Define the API endpoint and parameters
 
@@ -108,8 +108,14 @@ class CollegeTransferAPI:
         sending_institution_id = int(keyArray[1])
         receiving_institution_id = int(keyArray[3])
         academic_year_id = int(keyArray[0])
+        category_code = "major"
 
-        url = f"https://assist.org/api/agreements?receivingInstitutionId={receiving_institution_id}&sendingInstitutionId={sending_institution_id}&academicYearId={academic_year_id}&categoryCode=major"
+        if "Department" in key:
+            category_code = "dept"
+
+        url = f"https://assist.org/api/agreements?receivingInstitutionId={receiving_institution_id}&sendingInstitutionId={sending_institution_id}&academicYearId={academic_year_id}&categoryCode={category_code}"
+
+        print(url)
 
         result = requests.get(url)
 
