@@ -251,17 +251,16 @@ def chat_with_agreement():
         if not data: return jsonify({"error": "Invalid JSON payload"}), 400
 
         new_user_message_text = data.get('new_message')
-        # Google's ChatSession manages history internally, but we need to format it initially
-        openai_history = data.get('history', [])
+        # History from frontend (e.g., [{'role': 'user', 'content': 'Hi'}, {'role': 'assistant', 'content': 'Hello!'}])
+        frontend_history = data.get('history', [])
         image_filenames = data.get('image_filenames') # Only sent on first turn
 
         if not new_user_message_text: return jsonify({"error": "Missing 'new_message' text"}), 400
 
-        # Inside the /chat endpoint
-
         # --- Prepare Input for Gemini ---
-        prompt_parts = [new_user_message_text] # Start with the text part
+        prompt_parts = [] # Initialize prompt parts list
 
+        # --- Add Images (if provided, typically only on the first turn) ---
         if image_filenames:
             print(f"Processing {len(image_filenames)} images for Gemini.")
             image_count = 0
@@ -273,68 +272,79 @@ def chat_with_agreement():
                         continue
 
                     image_bytes = grid_out.read()
-                    # --- Determine MIME type (ensure it's correct) ---
-                    # Use getattr for safety, default to image/png if not found
                     mime_type = getattr(grid_out, 'contentType', None)
                     if not mime_type:
-                         # Basic check based on filename extension if contentType is missing
-                         if filename.lower().endswith(".jpg") or filename.lower().endswith(".jpeg"):
-                             mime_type = "image/jpeg"
-                         elif filename.lower().endswith(".png"):
-                              mime_type = "image/png"
-                         # Add more types if needed (webp, heic, heif)
-                         else:
-                             mime_type = "image/png" # Default fallback
+                         if filename.lower().endswith(".jpg") or filename.lower().endswith(".jpeg"): mime_type = "image/jpeg"
+                         elif filename.lower().endswith(".png"): mime_type = "image/png"
+                         else: mime_type = "image/png"
                          print(f"Warning: contentType missing for {filename}, inferred as {mime_type}")
-                    # --- End MIME type determination ---
 
-
-                    # --- Correct way to add image part ---
-                    # Append a dictionary, not genai.types.Part
+                    # Append image part as a dictionary
                     prompt_parts.append({
                         "mime_type": mime_type,
-                        "data": image_bytes # Send raw bytes directly
+                        "data": image_bytes
                     })
-                    # --- End Correction ---
-
                     image_count += 1
                 except Exception as img_err:
                     print(f"Error reading/processing image {filename} for Gemini: {img_err}. Skipping.")
-            print(f"Added {image_count} images to Gemini prompt.")
+            print(f"Added {image_count} images to Gemini prompt parts.")
         else:
-            print("No image filenames provided for Gemini.")
+            print("No image filenames provided for this turn.")
 
-        # --- Convert OpenAI history to Gemini format (remains the same) ---
+        # --- Always add the new user message text part ---
+        prompt_parts.append(new_user_message_text)
+
+        # --- Convert Frontend History to Gemini Format ---
         gemini_history = []
-        # ... (history conversion code) ...
+        print(f"Converting {len(frontend_history)} messages from frontend history.")
+        for msg in frontend_history:
+            # Map frontend roles ('user', 'assistant') to Gemini roles ('user', 'model')
+            role = 'model' if msg.get('role') == 'assistant' else 'user'
+            # Ensure content exists and is a string
+            content = msg.get('content', '')
+            if not isinstance(content, str):
+                print(f"Warning: Skipping history item with non-string content: {content}")
+                continue
+            # Append structured content for Gemini history
+            gemini_history.append({
+                "role": role,
+                "parts": [content] # Gemini history parts are lists
+            })
+        print(f"Converted history for Gemini: {len(gemini_history)} items.")
+        # --- End History Conversion ---
 
-        # --- Initialize Gemini Model and Chat (remains the same) ---
-        model = genai.GenerativeModel('gemini-1.5-flash-latest')
+
+        # --- Initialize Gemini Model and Chat ---
+        # Use safety settings suitable for your use case
+        safety_settings = {
+            HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+            HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+            HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+            HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+        }
+        model = genai.GenerativeModel(
+            'gemini-1.5-flash-latest', # Or your preferred model
+            safety_settings=safety_settings
+            )
+        # Start the chat WITH the converted history
         chat = model.start_chat(history=gemini_history)
 
-        print(f"Sending request to Gemini with {len(prompt_parts)} parts...")
+        print(f"Sending request to Gemini with {len(prompt_parts)} parts in the new message...")
+        # print(f"Gemini History being used: {gemini_history}") # Optional: Log the history being passed
 
-        # --- Send message to Gemini (remains the same) ---
-        safety_settings = { # Optional safety settings
-            # ... (safety settings) ...
-        }
-        response = chat.send_message(prompt_parts, safety_settings=safety_settings)
+        # --- Send message to Gemini ---
+        # Note: We send only the NEW prompt_parts here. The history is managed by the chat object.
+        response = chat.send_message(prompt_parts) # Removed safety_settings here if set in model
 
         assistant_reply = response.text
         print("Received reply from Gemini.")
 
         return jsonify({"reply": assistant_reply})
 
-    # ... (exception handling remains the same) ...
-
     except Exception as e:
         print(f"Error in /chat endpoint (Gemini): {e}")
         traceback.print_exc()
-        # Try to provide a more specific error if possible
         error_message = f"An unexpected error occurred with the AI chat: {str(e)}"
-        # Check for specific Google API errors if needed
-        # if isinstance(e, google.api_core.exceptions.GoogleAPIError):
-        #     error_message = f"Google API Error: {e}"
         return jsonify({"error": error_message}), 500
 
 # --- End Chat Endpoint ---

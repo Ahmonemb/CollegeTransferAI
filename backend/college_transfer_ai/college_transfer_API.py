@@ -176,46 +176,112 @@ class CollegeTransferAPI:
         return result_dict_non_ccs
     
     
-    def get_articulation_agreement(self, academic_year_id, sending_institution_id, receiving_institution_id, major_key):
-        filename = (
-            f"{self.get_college_from_id(sending_institution_id)}_to_"
-            f"{self.get_college_from_id(receiving_institution_id)}_"
-            f"{self.get_major_from_key(major_key)}_"
-            f"{self.get_year_from_id(academic_year_id)}.pdf"
-        )
+    def get_articulation_agreement(self, academic_year_id, sending_institution_id, receiving_institution_id, key):
+        try: # Wrap more of the logic for better error handling
+            college_name = self.get_college_from_id(sending_institution_id)
+            receiving_name = self.get_college_from_id(receiving_institution_id)
+            major_name = self.get_major_from_key(key)
+            year_name = self.get_year_from_id(academic_year_id)
 
-        MONGO_URI = os.getenv("MONGO_URI") 
+            if not all([college_name, receiving_name, major_name, year_name]):
+                 print(f"Warning: Could not resolve all names for key {key}. Using fallback names.")
+                 # Provide fallback names or handle the error more gracefully
+                 college_name = college_name or f"sending_{sending_institution_id}"
+                 receiving_name = receiving_name or f"receiving_{receiving_institution_id}"
+                 major_name = major_name or f"major_{key.split('/')[-1]}" # Use last part of key
+                 year_name = year_name or f"year_{academic_year_id}"
 
-        client = MongoClient(MONGO_URI)
-        db = client["CollegeTransferAICluster"]
-        fs = gridfs.GridFS(db)
+            filename = (
+                f"{college_name}_to_"
+                f"{receiving_name}_"
+                f"{major_name}_"
+                f"{year_name}.pdf"
+            )
+            # Basic sanitization
+            filename = filename.replace('/', '_').replace('\\', '_')
+            print(f"Generated filename: {filename}")
 
-        # Check if file already exists
-        if fs.find_one({"filename": filename}):
+            # --- Check if already exists in GridFS (Optional, keep if you still want GridFS check) ---
+            MONGO_URI = os.getenv("MONGO_URI")
+            if not MONGO_URI:
+                raise ValueError("MONGO_URI environment variable not set.")
+            client = MongoClient(MONGO_URI)
+            db = client["CollegeTransferAICluster"]
+            fs = gridfs.GridFS(db)
+            if fs.find_one({"filename": filename}):
+                print(f"PDF '{filename}' already exists in GridFS. Skipping download.")
+                client.close()
+                return filename # Return existing filename if found
+
+            # --- Construct URL (same as before) ---
+            viewBy = "major"
+            if "Department" in key:
+                viewBy = "dept" 
+
+            url = (
+                f"https://assist.org/transfer/results?year={academic_year_id}"
+                f"&institution={sending_institution_id}"
+                f"&agreement={receiving_institution_id}"
+                f"&agreementType=to&viewAgreementsOptions=true&view=agreement"
+                f"&viewBy={viewBy}&viewSendingAgreements=false&viewByKey={key}"
+            )
+            print(f"Attempting to fetch PDF from URL: {url}")
+
+            # --- Download PDF using Playwright (same as before) ---
+            pdf_bytes = None
+            with sync_playwright() as p:
+                browser = None
+                try:
+                    browser = p.chromium.launch(headless=True)
+                    page = browser.new_page()
+                    page.goto(url, wait_until="networkidle", timeout=60000) # Increased timeout
+                    page.wait_for_timeout(2000) # Small delay
+                    pdf_bytes = page.pdf(format="A4")
+                    print(f"Successfully downloaded PDF bytes (size: {len(pdf_bytes)} bytes)")
+                except Exception as playwright_err:
+                     print(f"Playwright error fetching PDF from {url}: {playwright_err}")
+                     if browser: browser.close() # Ensure browser closes on error
+                     client.close() # Ensure mongo client closes
+                     return None # Indicate failure
+                finally:
+                    if browser: browser.close()
+
+            # --- Save PDF Locally ---
+            if pdf_bytes:
+                # local_pdf_path = f"./{filename}" # Save in the current directory where the script runs
+                # try:
+                #     with open(local_pdf_path, "wb") as f_local: # Open in binary write mode
+                #         f_local.write(pdf_bytes)
+                #     print(f"Successfully saved PDF locally to: {local_pdf_path}")
+                # except Exception as local_save_err:
+                #     print(f"Error saving PDF locally to {local_pdf_path}: {local_save_err}")
+                #     # Decide if you still want to proceed with GridFS or return failure
+                #     client.close()
+                #     return None # Indicate failure if local save fails
+
+                # --- Save to GridFS (Optional - keep or remove) ---
+                try:
+                    fs.put(pdf_bytes, filename=filename, contentType='application/pdf')
+                    print(f"Successfully saved PDF '{filename}' to GridFS.")
+                except Exception as gridfs_err:
+                    print(f"Error saving PDF '{filename}' to GridFS: {gridfs_err}")
+                    # Handle GridFS save error if needed
+
+            else:
+                 print("Failed to obtain PDF bytes, cannot save.")
+                 client.close()
+                 return None # Indicate failure
+
             client.close()
-            return filename
+            return filename # Return the filename on success
 
-        url = (
-            f"https://assist.org/transfer/results?year={academic_year_id}"
-            f"&institution={sending_institution_id}"
-            f"&agreement={receiving_institution_id}"
-            f"&agreementType=to&viewAgreementsOptions=true&view=agreement"
-            f"&viewBy=major&viewSendingAgreements=false&viewByKey={major_key}"
-        )
-
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            page = browser.new_page()
-            page.goto(url, wait_until="networkidle")
-            pdf_bytes = page.pdf(format="A4")  # Get PDF as bytes
-            browser.close()
-
-        fs.put(pdf_bytes, filename=filename)
-        client.close()
-
-        return filename
-        
-
-
+        except Exception as e:
+            print(f"General error in get_articulation_agreement for key {key}: {e}")
+            import traceback
+            traceback.print_exc()
+            # Ensure client is closed if it was opened
+            if 'client' in locals() and client:
+                 client.close()
+            return None # Indicate failure
 
 api = CollegeTransferAPI()
