@@ -1,52 +1,162 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { useParams } from 'react-router-dom';
-import { fetchData } from '../services/api';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useParams, useLocation } from 'react-router-dom'; // Import useLocation
 import PdfViewer from './PdfViewer';
 import ChatInterface from './ChatInterface';
+import { fetchData } from '../services/api';
 import '../App.css';
 
-// Constants remain the same
-const minColWidth = 150;
-const dividerWidth = 1;
-const fixedMajorsWidth = 300;
+// Helper function to format remaining time
+function formatRemainingTime(resetTimestamp) {
+    if (!resetTimestamp) return '';
+    const now = new Date();
+    const resetDate = new Date(resetTimestamp);
+    const diff = resetDate.getTime() - now.getTime();
 
-function AgreementViewerPage({ user }) {
-    const { sendingId, receivingId, yearId } = useParams();
+    if (diff <= 0) return 'Usage reset';
 
-    // --- State for resizing ---
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+    return `Resets in ${hours}h ${minutes}m ${seconds}s`;
+}
+
+
+function AgreementViewerPage({ user, userTier }) {
+    const { sendingId: initialSendingId, receivingId, yearId } = useParams(); // Get initial IDs from URL
+    const location = useLocation(); // Get location object
+
+    // Get the full list passed from the form, default to an array containing the initial one if state is missing
+    const allSelectedSendingInstitutions = useMemo(() => {
+        return location.state?.allSelectedSendingInstitutions || [{ id: initialSendingId, name: 'Unknown Sending Institution' }];
+    }, [location.state?.allSelectedSendingInstitutions, initialSendingId]);
+
+    // --- State for resizing (remains the same) ---
     const [chatColumnWidth, setChatColumnWidth] = useState(400);
     const isResizingRef = useRef(false);
     const dividerRef = useRef(null);
     const containerRef = useRef(null);
 
-    // --- State for Majors Column Visibility ---
+    // Define minColWidth and dividerWidth as constants outside the component
+    const minColWidth = 150;
+    const dividerWidth = 1;
+    const fixedMajorsWidth = 300; // Revert to fixed width for majors
+
+    // --- State for Majors Column Visibility (remains the same) ---
     const [isMajorsVisible, setIsMajorsVisible] = useState(true);
     const isMajorsVisibleRef = useRef(isMajorsVisible);
 
-    // --- Effect to update the ref ---
+    // --- Update ref whenever visibility state changes ---
     useEffect(() => {
         isMajorsVisibleRef.current = isMajorsVisible;
     }, [isMajorsVisible]);
 
-    // --- Existing State ---
+    // --- State for Agreement Data ---
     const [selectedCategory, setSelectedCategory] = useState('major');
     const [majors, setMajors] = useState({});
     const [isLoadingMajors, setIsLoadingMajors] = useState(true);
-    const [error, setError] = useState(null);
-    const [pdfError, setPdfError] = useState(null);
+    const [error, setError] = useState(null); // General error
+    const [pdfError, setPdfError] = useState(null); // PDF/Image specific error
     const [selectedMajorKey, setSelectedMajorKey] = useState(null);
     const [selectedMajorName, setSelectedMajorName] = useState('');
-    const [selectedPdfFilename, setSelectedPdfFilename] = useState(null);
-    const [imageFilenames, setImageFilenames] = useState([]);
     const [isLoadingPdf, setIsLoadingPdf] = useState(false);
     const [majorSearchTerm, setMajorSearchTerm] = useState('');
     const [hasMajorsAvailable, setHasMajorsAvailable] = useState(true);
     const [hasDepartmentsAvailable, setHasDepartmentsAvailable] = useState(true);
     const [isLoadingAvailability, setIsLoadingAvailability] = useState(true);
 
-    // --- Existing Effects (Availability, Fetching Data, Cleanup) ---
+    // --- NEW State for Multiple PDFs/Tabs ---
+    const [agreementData, setAgreementData] = useState([]); // Array of { sendingId, sendingName, pdfFilename }
+    const [activeTabIndex, setActiveTabIndex] = useState(0); // Index of the currently viewed PDF/Tab
+    const [imagesForActivePdf, setImagesForActivePdf] = useState([]); // Renamed for clarity
+    const [allAgreementsImageFilenames, setAllAgreementsImageFilenames] = useState([]); // NEW: For initial chat analysis
+
+    // --- NEW State for User Usage Status ---
+    const [usageStatus, setUsageStatus] = useState({
+        usageCount: null,
+        usageLimit: null,
+        resetTime: null,
+        tier: userTier || null, // Initialize tier from prop
+        error: null,
+    });
+    const [countdown, setCountdown] = useState('');
+    // --- End Usage Status State ---
+
+    // --- Derived state for the currently active agreement ---
+    const currentAgreement = agreementData[activeTabIndex] || null;
+    const currentSendingId = currentAgreement?.sendingId || initialSendingId; // Fallback to URL param if needed initially
+    const currentPdfFilename = currentAgreement?.pdfFilename || null;
+
+    // --- Effect to Fetch User Usage Status ---
     useEffect(() => {
-        if (!sendingId || !receivingId || !yearId) {
+        // Update local tier state if prop changes (e.g., after successful payment webhook)
+        setUsageStatus(prev => ({ ...prev, tier: userTier }));
+
+        if (!user || !user.idToken) {
+            setUsageStatus({ usageCount: null, usageLimit: null, resetTime: null, tier: userTier, error: 'Not logged in' });
+            return;
+        }
+
+        const fetchStatus = async () => {
+            try {
+                const data = await fetchData('user-status', {
+                    headers: {
+                        'Authorization': `Bearer ${user.idToken}`
+                    }
+                });
+                if (data && data.usageLimit !== undefined) {
+                    setUsageStatus({
+                        usageCount: data.usageCount,
+                        usageLimit: data.usageLimit,
+                        resetTime: data.resetTime,
+                        tier: data.tier, // Use tier from API response
+                        error: null,
+                    });
+                } else {
+                    throw new Error(data?.error || 'Invalid status response');
+                }
+            } catch (err) {
+                console.error("Error fetching user status:", err);
+                // Keep tier from prop even if fetch fails? Or show error?
+                setUsageStatus(prev => ({ ...prev, tier: userTier, error: `Failed to load usage: ${err.message}` }));
+            }
+        };
+
+        fetchStatus();
+        // Optionally, refetch periodically if needed, but a single fetch on load/user change might be sufficient
+        // const intervalId = setInterval(fetchStatus, 60000); // Example: refetch every minute
+        // return () => clearInterval(intervalId);
+
+    }, [user, userTier]); // Re-fetch when user object changes
+
+    // --- Effect for Countdown Timer ---
+    useEffect(() => {
+        if (!usageStatus.resetTime) {
+            setCountdown('');
+            return;
+        }
+
+        const intervalId = setInterval(() => {
+            const remaining = formatRemainingTime(usageStatus.resetTime);
+            setCountdown(remaining);
+            if (remaining === 'Usage reset') {
+                clearInterval(intervalId);
+                // Optionally refetch status after reset?
+            }
+        }, 1000); // Update every second
+
+        // Initial calculation
+        setCountdown(formatRemainingTime(usageStatus.resetTime));
+
+        return () => clearInterval(intervalId); // Cleanup interval on unmount or resetTime change
+    }, [usageStatus.resetTime]);
+    // --- End Countdown Effect ---
+
+
+    // --- Existing Effects (Availability, Fetching Majors - adjust dependencies) ---
+    // Availability check might need adjustment if it depends on a single sendingId
+    useEffect(() => {
+        if (!initialSendingId || !receivingId || !yearId) {
             setIsLoadingAvailability(false);
             setHasMajorsAvailable(false);
             setHasDepartmentsAvailable(false);
@@ -58,7 +168,7 @@ function AgreementViewerPage({ user }) {
         setHasDepartmentsAvailable(false);
 
         const checkAvailability = async (category) => {
-            const cacheKey = `agreements-${category}-${sendingId}-${receivingId}-${yearId}`;
+            const cacheKey = `agreements-${category}-${initialSendingId}-${receivingId}-${yearId}`;
             try {
                 const storedData = localStorage.getItem(cacheKey);
                 if (storedData) {
@@ -73,7 +183,7 @@ function AgreementViewerPage({ user }) {
             }
 
             try {
-                const data = await fetchData(`majors?sendingInstitutionId=${sendingId}&receivingInstitutionId=${receivingId}&academicYearId=${yearId}&categoryCode=${category}`);
+                const data = await fetchData(`majors?sendingInstitutionId=${initialSendingId}&receivingInstitutionId=${receivingId}&academicYearId=${yearId}&categoryCode=${category}`);
                 return data && Object.keys(data).length > 0;
             } catch (err) {
                 console.error(`Error checking availability for ${category}:`, err);
@@ -99,11 +209,13 @@ function AgreementViewerPage({ user }) {
                 setIsLoadingAvailability(false);
             });
 
-    }, [sendingId, receivingId, yearId, selectedCategory]);
+    }, [initialSendingId, receivingId, yearId, selectedCategory]);
 
+    // Fetch Majors/Departments based on the *initial* sendingId from URL (or decide how to handle multiple)
+    // For now, let's assume majors are fetched based on the first sending institution shown
     useEffect(() => {
-        if (isLoadingAvailability || !sendingId || !receivingId || !yearId) {
-            if (!sendingId || !receivingId || !yearId) {
+        if (isLoadingAvailability || !initialSendingId || !receivingId || !yearId) {
+            if (!initialSendingId || !receivingId || !yearId) {
                 setError("Required institution or year information is missing in URL.");
                 setIsLoadingMajors(false);
                 setMajors({});
@@ -118,7 +230,7 @@ function AgreementViewerPage({ user }) {
             return;
         }
 
-        const cacheKey = `agreements-${selectedCategory}-${sendingId}-${receivingId}-${yearId}`;
+        const cacheKey = `agreements-${selectedCategory}-${initialSendingId}-${receivingId}-${yearId}`;
         let cachedData = null;
 
         try {
@@ -143,7 +255,7 @@ function AgreementViewerPage({ user }) {
 
         const fetchCategoryData = async () => {
             try {
-                const data = await fetchData(`majors?sendingInstitutionId=${sendingId}&receivingInstitutionId=${receivingId}&academicYearId=${yearId}&categoryCode=${selectedCategory}`);
+                const data = await fetchData(`majors?sendingInstitutionId=${initialSendingId}&receivingInstitutionId=${receivingId}&academicYearId=${yearId}&categoryCode=${selectedCategory}`);
                 console.log(`API response for ${selectedCategory}:`, data);
 
                 if (data && Object.keys(data).length > 0) {
@@ -174,9 +286,191 @@ function AgreementViewerPage({ user }) {
 
         fetchCategoryData();
 
-    }, [sendingId, receivingId, yearId, selectedCategory, isLoadingAvailability, hasMajorsAvailable, hasDepartmentsAvailable]);
+    }, [initialSendingId, receivingId, yearId, selectedCategory, isLoadingAvailability, hasMajorsAvailable, hasDepartmentsAvailable]);
 
-    const handleMouseMove = useCallback((e) => {
+    // --- MODIFIED Effect to fetch agreement details AND ALL initial images ---
+    const fetchAgreementDetailsAndImages = useCallback(async () => {
+        if (!selectedMajorKey || allSelectedSendingInstitutions.length === 0 || !receivingId || !yearId) {
+            setAgreementData([]);
+            setAllAgreementsImageFilenames([]); // Clear all images
+            setImagesForActivePdf([]); // Clear active images
+            return;
+        }
+
+        setIsLoadingPdf(true); // Use this state for the overall loading
+        setPdfError(null);
+        setAgreementData([]);
+        setAllAgreementsImageFilenames([]);
+        setImagesForActivePdf([]);
+
+        let fetchedAgreements = []; // To store results from /articulation-agreements
+
+        try {
+            // 1. Fetch PDF filenames for all agreements
+            const sendingIds = allSelectedSendingInstitutions.map(inst => inst.id);
+            console.log("Fetching agreements list for Sending IDs:", sendingIds, selectedMajorKey);
+            const response = await fetchData('/articulation-agreements', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ sending_ids: sendingIds, receiving_id: receivingId, year_id: yearId, major_key: selectedMajorKey })
+            });
+
+            if (!response || !Array.isArray(response.agreements)) {
+                throw new Error(response?.error || "Invalid response format from /articulation-agreements");
+            }
+
+            // Map response to include names
+            fetchedAgreements = response.agreements.map(agreement => {
+                const sendingInst = allSelectedSendingInstitutions.find(inst => inst.id === agreement.sendingId);
+                return { ...agreement, sendingName: sendingInst ? sendingInst.name : `Sending ID ${agreement.sendingId}` };
+            });
+            console.log("Received agreement list:", fetchedAgreements);
+            setAgreementData(fetchedAgreements);
+            setActiveTabIndex(0); // Set first tab active
+
+            // 2. Fetch image filenames for ALL valid PDFs in parallel
+            const imageFetchPromises = fetchedAgreements
+                .filter(agreement => agreement.pdfFilename) // Only fetch for those with a filename
+                .map(agreement =>
+                    fetchData(`pdf-images/${encodeURIComponent(agreement.pdfFilename)}`)
+                        .then(imgResponse => {
+                            if (imgResponse && imgResponse.image_filenames) {
+                                return { sendingId: agreement.sendingId, images: imgResponse.image_filenames };
+                            } else {
+                                console.warn(`No images found for ${agreement.pdfFilename}`);
+                                return { sendingId: agreement.sendingId, images: [] }; // Return empty array on failure/no images
+                            }
+                        })
+                        .catch(err => {
+                            console.error(`Error fetching images for ${agreement.pdfFilename}:`, err);
+                            return { sendingId: agreement.sendingId, images: [] }; // Return empty array on error
+                        })
+                );
+
+            const imageResults = await Promise.allSettled(imageFetchPromises);
+
+            const allImagesCombined = imageResults.reduce((acc, result) => {
+                if (result.status === 'fulfilled' && result.value.images.length > 0) {
+                    // Optionally add context comment for LLM?
+                    // acc.push(`--- Images for Sending ID ${result.value.sendingId} ---`);
+                    acc.push(...result.value.images);
+                }
+                return acc;
+            }, []);
+
+            console.log("Combined image filenames for initial analysis:", allImagesCombined);
+            setAllAgreementsImageFilenames(allImagesCombined);
+
+            // 3. Fetch images for the *initially active* PDF (tab 0) for the viewer
+            const firstAgreement = fetchedAgreements[0];
+            if (firstAgreement && firstAgreement.pdfFilename) {
+                // Find the corresponding images from the parallel fetch results
+                const firstAgreementImagesResult = imageResults.find(result => result.status === 'fulfilled' && result.value.sendingId === firstAgreement.sendingId);
+                if (firstAgreementImagesResult && firstAgreementImagesResult.value.images.length > 0) {
+                     setImagesForActivePdf(firstAgreementImagesResult.value.images);
+                } else {
+                     // Handle case where even the first PDF's images failed to load
+                     setPdfError(`Failed to load images for the initial agreement: ${firstAgreement.sendingName}`);
+                     setImagesForActivePdf([]);
+                }
+            } else if (fetchedAgreements.length > 0) {
+                setPdfError(`No PDF filename found for the initial agreement: ${fetchedAgreements[0].sendingName}.`);
+                setImagesForActivePdf([]);
+            } else {
+                setPdfError("No agreements found for the selected major and institutions.");
+                setImagesForActivePdf([]);
+            }
+
+        } catch (err) {
+            console.error("Error fetching agreement details and images:", err);
+            setPdfError(`Failed to load agreement details: ${err.message}`);
+            setAgreementData([]);
+            setAllAgreementsImageFilenames([]);
+            setImagesForActivePdf([]);
+        } finally {
+            setIsLoadingPdf(false);
+        }
+    }, [selectedMajorKey, allSelectedSendingInstitutions, receivingId, yearId]); // Dependencies
+
+    // --- Effect to fetch images ONLY for the ACTIVE PDF VIEWER when tab changes ---
+    const fetchImagesForActiveTab = useCallback(async () => {
+        const activeAgreement = agreementData[activeTabIndex];
+        if (!activeAgreement || !activeAgreement.pdfFilename) {
+            setImagesForActivePdf([]); // Clear if no active agreement or filename
+            if (activeAgreement) setPdfError(`No PDF available for ${activeAgreement.sendingName}.`);
+            return;
+        }
+
+        // Removed the check for tab 0 here - let's always fetch on tab change for simplicity now.
+
+        setIsLoadingPdf(true); // Show loading for tab switch
+        setPdfError(null);
+        setImagesForActivePdf([]); // Clear previous tab's images
+        console.log("Fetching images for active tab PDF:", activeAgreement.pdfFilename);
+        try {
+            const response = await fetchData(`pdf-images/${encodeURIComponent(activeAgreement.pdfFilename)}`);
+            if (response && response.image_filenames) {
+                console.log("Received images for active tab:", response.image_filenames);
+                setImagesForActivePdf(response.image_filenames);
+            } else {
+                throw new Error(response?.error || "No image filenames received for active tab");
+            }
+        } catch (err) {
+            console.error(`Error fetching images for ${activeAgreement.pdfFilename}:`, err);
+            setPdfError(`Failed to load images for ${activeAgreement.sendingName}: ${err.message}`);
+            setImagesForActivePdf([]);
+        } finally {
+            setIsLoadingPdf(false);
+        }
+    // MODIFIED Dependencies: Only depend on data needed to identify the active agreement
+    }, [activeTabIndex, agreementData]); // Dependencies
+
+    // Trigger initial fetch when major changes
+    useEffect(() => {
+        fetchAgreementDetailsAndImages();
+    }, [fetchAgreementDetailsAndImages]);
+
+    // Trigger active image fetch when active tab changes
+    useEffect(() => {
+        // Fetch whenever the active tab index changes, but only if agreementData is loaded.
+        // This prevents fetching when agreementData is initially empty.
+        // Also ensures it runs for tab 0 *after* the initial data load completes.
+        if (agreementData.length > 0) {
+             console.log(`Tab changed to ${activeTabIndex} or agreementData loaded, fetching images for active tab.`);
+             fetchImagesForActiveTab();
+        } else {
+             console.log("Skipping fetchImagesForActiveTab because agreementData is empty.");
+        }
+    // MODIFIED Dependencies: Remove imagesForActivePdf
+    }, [activeTabIndex, agreementData, fetchImagesForActiveTab]);
+
+    // --- Handlers ---
+    const handleMajorSelect = (majorKey, majorName) => {
+        console.log("Major selected:", majorKey, majorName);
+        setSelectedMajorKey(majorKey);
+        setSelectedMajorName(majorName);
+        // fetchAgreementDetails will be triggered by the useEffect dependency change
+    };
+
+    const handleCategoryChange = (event) => {
+        const newCategory = event.target.value;
+        console.log("Category changed to:", newCategory);
+        setSelectedCategory(newCategory);
+        // Reset major selection when category changes
+        setSelectedMajorKey(null);
+        setSelectedMajorName('');
+        setMajorSearchTerm(''); // Clear search term as well
+        // The useEffect for fetching majors/depts will re-run due to selectedCategory change
+    };
+
+    const handleTabClick = (index) => {
+        console.log("Tab clicked:", index);
+        setActiveTabIndex(index);
+        // Image fetch will be triggered by the useEffect dependency change
+    };
+
+    // --- Resizing Handlers (remain the same) ---
+    const handleMouseMove = useCallback((e) => { // Keep useCallback, but dependencies change
         if (!isResizingRef.current || !containerRef.current) {
             return;
         }
@@ -185,22 +479,27 @@ function AgreementViewerPage({ user }) {
         const mouseX = e.clientX;
         const containerLeft = containerRect.left;
         const totalWidth = containerRect.width;
-        const gapWidth = 16;
+        const gapWidth = 16; // Assumed 1em = 16px
 
+        // --- Read the *current* visibility from the ref ---
         const currentVisibility = isMajorsVisibleRef.current;
 
+        // Calculate the starting position of the chat column
         const majorsEffectiveWidth = currentVisibility ? fixedMajorsWidth : 0;
-        const gap1EffectiveWidth = currentVisibility ? gapWidth : 0;
+        const gap1EffectiveWidth = currentVisibility ? gapWidth : 0; // Gap between majors and chat
         const chatStartOffset = majorsEffectiveWidth + gap1EffectiveWidth;
 
+        // Calculate desired chat width based on mouse position relative to chat start
         let newChatWidth = mouseX - containerLeft - chatStartOffset;
 
+        // Constraints: ensure chat and PDF columns have minimum width
         const maxChatWidth = totalWidth - chatStartOffset - minColWidth - gapWidth - dividerWidth;
         newChatWidth = Math.max(minColWidth, Math.min(newChatWidth, maxChatWidth));
 
         setChatColumnWidth(newChatWidth);
 
-    }, []);
+    // --- Remove isMajorsVisible from dependencies, rely on the ref ---
+    }, []); // Empty dependency array is okay now because we use the ref
 
     const handleMouseUp = useCallback(() => {
         if (isResizingRef.current) {
@@ -221,78 +520,6 @@ function AgreementViewerPage({ user }) {
         };
     }, [handleMouseMove, handleMouseUp]);
 
-    const handleMajorSelect = async (majorKey, majorName) => {
-        if (!majorKey || isLoadingPdf) return;
-
-        setSelectedMajorKey(majorKey);
-        setSelectedMajorName(majorName);
-        setSelectedPdfFilename(null);
-        setImageFilenames([]);
-        setIsLoadingPdf(true);
-        setError(null);
-        setPdfError(null);
-
-        try {
-            const agreementData = await fetchData(`articulation-agreement?key=${majorKey}`);
-            if (agreementData && agreementData.pdf_filename) {
-                const pdfFilename = agreementData.pdf_filename;
-                setSelectedPdfFilename(pdfFilename);
-
-                const imageCacheKey = `pdf-images-${pdfFilename}`;
-                let fetchedFromCache = false;
-
-                try {
-                    const cachedImageData = localStorage.getItem(imageCacheKey);
-                    if (cachedImageData) {
-                        const parsedImageData = JSON.parse(cachedImageData);
-                        if (parsedImageData && parsedImageData.image_filenames) {
-                            console.log("Loaded images from cache:", imageCacheKey);
-                            setImageFilenames(parsedImageData.image_filenames);
-                            fetchedFromCache = true;
-                        } else {
-                            console.warn("Cached image data invalid, removing:", imageCacheKey);
-                            localStorage.removeItem(imageCacheKey);
-                        }
-                    }
-                } catch (e) {
-                    console.error("Failed to read or parse images cache:", e);
-                    localStorage.removeItem(imageCacheKey);
-                }
-
-                if (!fetchedFromCache) {
-                    console.log("Fetching images from API:", imageCacheKey);
-                    const imageData = await fetchData(`pdf-images/${pdfFilename}`);
-                    if (imageData && imageData.image_filenames) {
-                        setImageFilenames(imageData.image_filenames);
-                        try {
-                            localStorage.setItem(imageCacheKey, JSON.stringify(imageData));
-                            console.log("Saved images to cache:", imageCacheKey);
-                        } catch (e) {
-                            console.error("Failed to save images to cache:", e);
-                        }
-                    } else {
-                        throw new Error(imageData?.error || 'Failed to load image list for PDF');
-                    }
-                }
-            } else if (agreementData && agreementData.error) {
-                throw new Error(`Agreement Error: ${agreementData.error}`);
-            } else {
-                throw new Error('Received unexpected data or no PDF filename when fetching agreement.');
-            }
-        } catch (err) {
-            console.error("Error fetching agreement or images:", err);
-            setPdfError(err.message);
-            setSelectedPdfFilename(null);
-            setImageFilenames([]);
-        } finally {
-            setIsLoadingPdf(false);
-        }
-    };
-
-    
-
-    
-
     const handleMouseDown = useCallback((e) => {
         e.preventDefault();
         isResizingRef.current = true;
@@ -302,16 +529,7 @@ function AgreementViewerPage({ user }) {
         document.body.style.userSelect = 'none';
     }, [handleMouseMove, handleMouseUp]);
 
-    const handleCategoryChange = (event) => {
-        setSelectedCategory(event.target.value);
-        setSelectedMajorKey(null);
-        setSelectedMajorName('');
-        setSelectedPdfFilename(null);
-        setImageFilenames([]);
-        setPdfError(null);
-        setError(null);
-    };
-
+    // --- Toggle Majors Visibility (remains the same) ---
     const toggleMajorsVisibility = () => {
         const gapWidth = 16;
         setIsMajorsVisible(prevVisible => {
@@ -328,6 +546,7 @@ function AgreementViewerPage({ user }) {
         });
     };
 
+    // --- Calculate Layout (remains the same) ---
     const filteredMajors = useMemo(() => {
         const lowerCaseSearchTerm = majorSearchTerm.toLowerCase();
         if (typeof majors !== 'object' || majors === null) {
@@ -358,7 +577,36 @@ function AgreementViewerPage({ user }) {
                     padding: '0.5em',
                     boxSizing: 'border-box',
                     color: "#333",
+                    position: 'relative', // Needed for absolute positioning of usage status
                 }}>
+
+                {/* --- Usage Status Display --- */}
+                {user && (usageStatus.usageLimit !== null || usageStatus.error) && (
+                    <div style={{
+                        position: 'absolute',
+                        bottom: '10px',
+                        right: '20px',
+                        background: 'rgba(255, 255, 255, 0.8)',
+                        padding: '5px 10px',
+                        borderRadius: '4px',
+                        fontSize: '0.85em',
+                        color: usageStatus.error ? 'red' : '#555',
+                        border: '1px solid #ccc',
+                        zIndex: 10 // Ensure it's above other elements
+                    }}>
+                        {usageStatus.error ? (
+                            <span>{usageStatus.error}</span>
+                        ) : (
+                            <>
+                                <span>Tier: {usageStatus.tier || 'N/A'} | </span>
+                                <span>Usage: {usageStatus.usageCount ?? 'N/A'} / {usageStatus.usageLimit ?? 'N/A'} | </span>
+                                <span>{countdown || 'Calculating reset...'}</span>
+                            </>
+                        )}
+                    </div>
+                )}
+                {/* --- End Usage Status Display --- */}
+
 
                 {/* Left Column (Majors/Depts List) */}
                 {isMajorsVisible && (
@@ -366,10 +614,10 @@ function AgreementViewerPage({ user }) {
                         flex: `0 0 ${currentMajorsFlexBasis}`,
                         display: 'flex',
                         flexDirection: 'column',
-                        minWidth: `${minColWidth}px`,
+                        minWidth: isMajorsVisible ? `${minColWidth}px` : '0px',
                         overflow: 'hidden',
                         transition: 'flex-basis 0.3s ease, min-width 0.3s ease',
-                        marginRight: '1em',
+                        marginRight: isMajorsVisible ? '1em' : '0',
                         position: 'relative',
                         paddingTop: '2.5em'
                     }}>
@@ -425,11 +673,15 @@ function AgreementViewerPage({ user }) {
                 <div style={{ flex: `0 0 ${currentChatFlexBasis}`, display: 'flex', flexDirection: 'column', minWidth: `${minColWidth}px` }}>
                     {/* Pass visibility state and toggle function */}
                     <ChatInterface
-                        imageFilenames={imageFilenames}
+                        imageFilenames={allAgreementsImageFilenames} // Pass the combined list
                         selectedMajorName={selectedMajorName}
                         userName={userName}
                         isMajorsVisible={isMajorsVisible}
                         toggleMajorsVisibility={toggleMajorsVisibility}
+                        sendingInstitutionId={currentSendingId}
+                        allSendingInstitutionIds={allSelectedSendingInstitutions.map(inst => inst.id)}
+                        receivingInstitutionId={receivingId}
+                        academicYearId={yearId}
                     />
                 </div>
 
@@ -438,7 +690,47 @@ function AgreementViewerPage({ user }) {
 
                 {/* Right Column (PDF Viewer) */}
                 <div style={{ flex: '1 1 0', display: 'flex', flexDirection: 'column', minWidth: `${minColWidth}px`, marginLeft: '1em' }}>
-                    <PdfViewer imageFilenames={imageFilenames} isLoading={isLoadingPdf} error={pdfError} filename={selectedPdfFilename} />
+                    {/* --- PDF Tabs --- */}
+                    {agreementData.length > 1 && (
+                        <div style={{ display: 'flex', borderBottom: '1px solid #ccc', flexShrink: 0, background: '#e9ecef' /* Light grey background for the tab bar */ }}>
+                            {agreementData.map((agreement, index) => (
+                                <button
+                                    key={agreement.sendingId}
+                                    onClick={() => handleTabClick(index)}
+                                    style={{
+                                        padding: '10px 15px',
+                                        border: 'none', // Remove default border
+                                        borderBottom: activeTabIndex === index ? '3px solid #0056b3' : '3px solid transparent', // Stronger blue for active border
+                                        background: activeTabIndex === index ? '#ffffff' : '#e9ecef', // White background for active, match bar background for inactive
+                                        color: activeTabIndex === index ? '#0056b3' : '#495057', // Darker text for inactive, blue for active
+                                        cursor: 'pointer',
+                                        fontWeight: activeTabIndex === index ? 'bold' : 'normal',
+                                        fontSize: '0.95em', // Slightly larger font
+                                        textAlign: 'center',
+                                        // Add subtle top/side borders for inactive tabs for definition
+                                        borderTop: activeTabIndex !== index ? '1px solid #dee2e6' : 'none',
+                                        borderLeft: activeTabIndex !== index ? '1px solid #dee2e6' : 'none',
+                                        borderRight: activeTabIndex !== index ? '1px solid #dee2e6' : 'none',
+                                        borderTopLeftRadius: '4px', // Slightly rounded top corners
+                                        borderTopRightRadius: '4px',
+                                        marginRight: '2px', // Small gap between tabs
+                                    }}
+                                    title={`View agreement from ${agreement.sendingName}`}
+                                >
+                                    {agreement.sendingName}
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                    {/* --- End PDF Tabs --- */}
+
+                    {/* Pass data for the ACTIVE PDF */}
+                    <PdfViewer
+                        imageFilenames={imagesForActivePdf} // Use state for active PDF's images
+                        isLoading={isLoadingPdf && agreementData[activeTabIndex]?.pdfFilename === currentPdfFilename} // Only show loading for the active tab's fetch
+                        error={pdfError} // Show general PDF error
+                        filename={currentPdfFilename} // Pass the active filename
+                    />
                 </div>
             </div>
         </>

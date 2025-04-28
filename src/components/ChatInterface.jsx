@@ -65,8 +65,19 @@ function formatText(text) {
    }
 }
 
-// Accept new props: isMajorsVisible, toggleMajorsVisibility
-function ChatInterface({ imageFilenames, selectedMajorName, userName, isMajorsVisible, toggleMajorsVisibility }) {
+// Accept new props for context
+function ChatInterface({
+    imageFilenames, // This now contains images from ALL agreements for the initial call
+    selectedMajorName,
+    userName, // Keep userName prop for display when logged in
+    isMajorsVisible,
+    toggleMajorsVisibility,
+    sendingInstitutionId, // ID for the currently viewed agreement (Current Context)
+    allSendingInstitutionIds, // Array of all selected sending IDs (Overall Context)
+    receivingInstitutionId,
+    academicYearId,
+    user // Add user prop
+}) {
     const [userInput, setUserInput] = useState('');
     const [messages, setMessages] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
@@ -86,72 +97,108 @@ function ChatInterface({ imageFilenames, selectedMajorName, userName, isMajorsVi
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }, [messages]);
 
-    // Clear chat and reset flag when agreement context changes
+    // Clear chat and reset flag when agreement context changes OR user logs out
     useEffect(() => {
         setMessages([]);
         setUserInput('');
         setChatError(null);
-        initialAnalysisSentRef.current = false; // Reset flag for new agreement
-        console.log("Chat cleared due to new agreement context.");
-    }, [imageFilenames, selectedMajorName]);
+        initialAnalysisSentRef.current = false; // Reset flag
+        console.log("Chat cleared due to new context or user change.");
+    }, [imageFilenames, selectedMajorName, user]); // Add user dependency here
 
     // Effect to send initial analysis request when images are loaded
     useEffect(() => {
+        // --- Add user check at the beginning ---
+        if (!user) {
+            initialAnalysisSentRef.current = false; // Ensure flag is reset if user logs out
+            return; // Don't proceed if user is not logged in
+        }
+        // --- End user check ---
+
         // Run only if:
         // - We have image filenames.
         // - Analysis hasn't been sent for this context yet.
         // - We are not currently loading anything (prevents race conditions).
+        // - User is logged in (checked above)
         if (imageFilenames && imageFilenames.length > 0 && !initialAnalysisSentRef.current && !isLoading) {
 
             const sendInitialAnalysis = async () => {
+                // User/token check is still good practice here, though the outer effect also checks
+                if (!user || !user.idToken) {
+                    console.error("Cannot send initial analysis: User not logged in or token missing.");
+                    setChatError("Authentication error. Please log in again.");
+                    setMessages([{ type: 'system', text: "Authentication error. Please log in again." }]);
+                    initialAnalysisSentRef.current = false; // Allow retry if user logs in
+                    return; // Stop execution
+                }
+
                 console.log("Sending initial analysis request...");
                 setIsLoading(true);
                 setChatError(null);
                 initialAnalysisSentRef.current = true; // Mark as sent for this context
 
-                // --- Updated Initial Prompt ---
+                const currentContextInfo = `The user is viewing an articulation agreement for the academic year ${academicYearId || 'N/A'} between sending institution ID ${sendingInstitutionId || 'N/A'} (the 'current' agreement) and receiving institution ID ${receivingInstitutionId || 'N/A'}. The selected major/department is "${selectedMajorName || 'N/A'}".`;
+                const overallContextInfo = allSendingInstitutionIds && allSendingInstitutionIds.length > 1
+                    ? `Note: The user originally selected multiple sending institutions (IDs: ${allSendingInstitutionIds.join(', ')}). Images for all selected agreements have been provided.`
+                    : 'Only one sending institution was selected.';
+
+                // --- MODIFIED Initial Prompt ---
                 const initialPrompt = `You are a helpful, knowledgeable, and supportive college counselor specializing in helping community college students successfully transfer to four-year universities. Your guidance should be clear, encouraging, and personalized based on each student's academic goals, major, preferred universities, and career aspirations. You provide information about transfer requirements, application tips, deadlines, articulation agreements, financial aid, scholarships, and campus life insights. Always empower students with accurate, up-to-date information and a positive, motivating tone. If you don't know an answer, offer to help them find resources or suggest next steps.
 
-Analyze the provided agreement images thoroughly. In your response, **first provide a concise summary of the key details found in the agreement**, including articulated courses, non-articulated courses, requirements, and any important notes or conditions. After the summary, answer the user's potential implicit question based on the analysis (e.g., how many courses are not articulated, suggest next steps/institutions if applicable based on proximity or course needs).
+**Current Context:** ${currentContextInfo}
+${overallContextInfo ? `**Overall Context:** ${overallContextInfo}` : ''}
 
-**Please format key details, lists (like courses or requirements), and action items using bullet points (* or -). Use **bold** for emphasis on key terms or numbers, and \`italic\` for specific course codes or titles where appropriate.**
+Analyze the provided agreement images thoroughly. Perform the following steps:
+1.  **Focus on the Current Context:** Analyze the agreement for the major between the **current sending institution** and the receiving institution.
+2.  **Explicitly state the current context:** Start your response with: "Analyzing the agreement for the *[Major Name]* major between [Current Sending ID] (bold) and [Receiving ID] (bold) for the [Year] (bold) academic year."
+3.  **Provide a concise summary** of the key details for the **current** agreement (articulated courses, requirements, etc.). Identify any required courses for the major at the receiving institution that are **not articulated** by the current sending institution.
+4.  **Compare Articulation (If Applicable):** If you identified non-articulated courses in step 3 AND other sending institutions were selected (see Overall Context), examine the provided images for the **other** agreements (Sending IDs: ${allSendingInstitutionIds.filter(id => id !== sendingInstitutionId).join(', ') || 'None'}). For each non-articulated course from the current agreement, state whether it **is articulated** by any of the **other** sending institutions based on their respective agreements. Present this comparison clearly, perhaps in a separate section or list.
+5.  **Suggest Next Steps:** Conclude with relevant advice or next steps for the student based on the analysis and comparison.
 
-**Important:** If the user asks about the details of the agreement being discussed (like the major, institutions, or year), refer to the context provided or the summary you generated. Do not state that you lack personal information about the user in this case.`;
-                // --- End Updated Initial Prompt ---
+**Formatting:** Use bullet points (* or -) for lists, **bold** for emphasis, and \`italic\` for course codes/titles.`;
+                // --- End MODIFIED Initial Prompt ---
 
                 // Display a system message while analysis runs
-                setMessages([{ type: 'system', text: "Analyzing agreement and generating summary..." }]);
+                setMessages([{ type: 'system', text: "Analyzing agreements and generating summary..." }]);
 
                 const payload = {
                     new_message: initialPrompt,
                     history: [], // No history for the very first message
-                    image_filenames: imageFilenames // Send images with this first request
+                    image_filenames: imageFilenames // Send the combined list of images
                 };
 
                 try {
                     console.log("Sending initial analysis to /chat:", payload);
                     const response = await fetchData('chat', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${user.idToken}`
+                        },
                         body: JSON.stringify(payload)
                     });
 
                     if (response && response.reply) {
-                        // --- Removed cleaning to allow '*' for bullets ---
-                        // const cleanedReply = response.reply.replace(/[*`]/g, '');
-                        const replyText = response.reply; // Use raw reply
-                        // Replace "Analyzing..." message with the actual reply
+                        const replyText = response.reply;
+                        // Replace the "Analyzing..." message with the actual reply
                         setMessages([{ type: 'bot', text: replyText }]);
                     } else {
+                        // Check specifically for auth error from backend response if possible
+                        if (response?.error?.includes("Authorization")) {
+                            throw new Error("Authorization token missing or invalid");
+                        }
                         throw new Error(response?.error || "No reply received for initial analysis.");
                     }
                 } catch (err) {
                     console.error("Initial analysis API error:", err);
                     const errorMsg = `Failed initial analysis: ${err.message}`;
                     setChatError(errorMsg);
-                    // Replace "Analyzing..." message with an error message
+                    // Replace "Analyzing..." with error message
                     setMessages([{ type: 'system', text: `Error during analysis: ${err.message}` }]);
-                    // Keep initialAnalysisSentRef true to prevent retries on error for this context
+                    // Consider resetting initialAnalysisSentRef.current = false; if the error is auth-related
+                    if (err.message.includes("Authorization")) {
+                        initialAnalysisSentRef.current = false;
+                    }
                 } finally {
                     setIsLoading(false);
                 }
@@ -161,14 +208,21 @@ Analyze the provided agreement images thoroughly. In your response, **first prov
         }
         // This effect depends on imageFilenames to know when context is ready,
         // and isLoading to avoid running while another request is in progress.
-    }, [imageFilenames, isLoading]);
+        // Also depends on user to re-evaluate if user logs in/out
+    }, [imageFilenames, isLoading, selectedMajorName, sendingInstitutionId, allSendingInstitutionIds, receivingInstitutionId, academicYearId, user]);
 
 
     const handleSend = async () => {
-        // Guard: Check for input, loading state.
-        if (!userInput.trim() || isLoading) return;
+        // Guard: Check for input, loading state, and user login
+        if (!userInput.trim() || isLoading || !user) return;
 
-        // User can only send manually *after* the initial analysis is attempted.
+        // User/token check (redundant with the main guard but safe)
+        if (!user || !user.idToken) {
+            console.error("Cannot send message: User not logged in or token missing.");
+            setChatError("Authentication error. Please log in again.");
+            setMessages(prev => [...prev, { type: 'system', text: "Authentication error. Please log in again." }]);
+            return; // Stop execution
+        }
 
         const currentInput = userInput;
         const currentHistory = [...messages];
@@ -180,10 +234,12 @@ Analyze the provided agreement images thoroughly. In your response, **first prov
         setChatError(null);
 
         // Prepare history for API
-        const apiHistory = currentHistory.map(msg => ({
-            role: msg.type === 'bot' ? 'assistant' : msg.type,
-            content: msg.text
-        }));
+        const apiHistory = currentHistory
+            .filter(msg => msg.type === 'user' || msg.type === 'bot') // Only send user/bot messages as history
+            .map(msg => ({
+                role: msg.type === 'bot' ? 'assistant' : msg.type, // 'user' or 'assistant'
+                content: msg.text
+            }));
 
         // Payload for subsequent messages (no image_filenames needed)
         const payload = {
@@ -198,21 +254,25 @@ Analyze the provided agreement images thoroughly. In your response, **first prov
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
+                     'Authorization': `Bearer ${user.idToken}`
                 },
                 body: JSON.stringify(payload)
             });
 
             if (response && response.reply) {
-                 // --- Removed cleaning to allow '*' for bullets ---
-                 // const cleanedReply = response.reply.replace(/[*`]/g, '');
-                 const replyText = response.reply; // Use raw reply
+                 const replyText = response.reply;
                  setMessages(prev => [...prev, { type: 'bot', text: replyText }]);
             } else {
+                 // Check specifically for auth error from backend response if possible
+                 if (response?.error?.includes("Authorization")) {
+                     throw new Error("Authorization token missing or invalid");
+                 }
                  throw new Error(response?.error || "No reply received or unexpected response format.");
             }
         } catch (err) {
             console.error("Chat API error:", err);
             setChatError(`Failed to get response: ${err.message}`);
+            // Add error message back to chat, but don't re-add user input
             setMessages(prev => [...prev, { type: 'system', text: `Error: ${err.message}` }]);
         } finally {
             setIsLoading(false);
@@ -220,12 +280,16 @@ Analyze the provided agreement images thoroughly. In your response, **first prov
         // --- End Backend Call ---
     };
 
-    // Disable input/button if loading (covers initial analysis and subsequent messages)
-    const isSendDisabled = isLoading || !userInput.trim();
-    // Adjust placeholder based on loading state and if messages exist
-    const placeholderText = isLoading
-        ? (messages.length === 0 ? "Analyzing agreement..." : "Thinking...") // More specific loading text
-        : (messages.length === 0 ? "Select an agreement to start." : "Ask a follow-up question..."); // Default placeholder
+    // Disable input/button if loading OR if user is not logged in
+    const isInteractionDisabled = isLoading || !user;
+    const isSendDisabled = isInteractionDisabled || !userInput.trim();
+
+    // Adjust placeholder based on loading state, user state, and if messages exist
+    const placeholderText = !user
+        ? "Please sign in to use the chat feature."
+        : isLoading
+            ? (messages.length === 0 ? "Analyzing agreement..." : "Thinking...")
+            : (messages.length === 0 ? "Select an agreement to start." : "Ask a follow-up question...");
 
 
     return (
@@ -272,15 +336,25 @@ Analyze the provided agreement images thoroughly. In your response, **first prov
                 flex: '1 1 auto',
                 overflowY: 'auto',
                 padding: '10px',
-                minHeight: 0
+                minHeight: 0,
+                 // Add a subtle background change if user is not logged in
+                backgroundColor: !user ? '#e9ecef' : '#f9f9f9'
             }}>
-                {/* Display placeholder only if not loading and no messages */}
-                {messages.length === 0 && !isLoading && (
+                {/* --- Show Sign-in Prompt if user is not logged in --- */}
+                {!user && (
+                    <div style={{ textAlign: 'center', color: '#6c757d', marginTop: '30px', padding: '20px', fontSize: '1.1em' }}>
+                        Please sign in to analyze agreements and chat with the AI assistant.
+                    </div>
+                )}
+                {/* --- End Sign-in Prompt --- */}
+
+                {/* Display messages only if user is logged in */}
+                {user && messages.length === 0 && !isLoading && (
                     <div style={{ textAlign: 'center', color: '#888', marginTop: '20px' }}>
                         {placeholderText}
                     </div>
                 )}
-                {messages.map((msg, index) => (
+                {user && messages.map((msg, index) => (
                     <div key={index} style={{ marginBottom: '10px', display: 'flex', justifyContent: msg.type === 'user' ? 'flex-end' : 'flex-start' }}>
                         <span style={{
                             display: 'inline-block',
@@ -295,15 +369,16 @@ Analyze the provided agreement images thoroughly. In your response, **first prov
                         }}>
                             {/* Add Prefix based on type */}
                             {msg.type === 'bot' && <strong style={{ marginRight: '5px' }}>AI:</strong>}
-                            {msg.type === 'user' && <strong style={{ marginRight: '5px' }}>{userName}:</strong>}
+                            {/* Use userName prop if available, otherwise fallback */}
+                            {msg.type === 'user' && <strong style={{ marginRight: '5px' }}>{userName || 'You'}:</strong>}
                             {/* Render formatted text */}
                             {formatText(msg.text)}
                         </span>
                     </div>
                 ))}
                 <div ref={messagesEndRef} />
-                {/* Error Indicator */}
-                {chatError && !isLoading && <p style={{ color: 'red', textAlign: 'center', fontWeight: 'bold' }}>{chatError}</p>}
+                {/* Error Indicator (only show if user is logged in) */}
+                {user && chatError && !isLoading && <p style={{ color: 'red', textAlign: 'center', fontWeight: 'bold' }}>{chatError}</p>}
             </div>
 
             {/* Input Area */}
@@ -315,12 +390,20 @@ Analyze the provided agreement images thoroughly. In your response, **first prov
                     onKeyDown={(e) => e.key === 'Enter' && !isSendDisabled && handleSend()}
                     placeholder={placeholderText}
                     style={{ flexGrow: 1, marginRight: '10px', padding: '10px', borderRadius: '20px', border: '1px solid #ccc' }}
-                    disabled={isLoading} // Only disable when loading
+                    disabled={isInteractionDisabled} // Disable if loading OR not logged in
                 />
                 <button
                     onClick={handleSend}
-                    disabled={isSendDisabled}
-                    style={{ padding: '10px 15px', borderRadius: '20px', border: 'none', backgroundColor: '#007bff', color: 'white', cursor: isSendDisabled ? 'not-allowed' : 'pointer' }}
+                    disabled={isSendDisabled} // Disable if loading OR not logged in OR no input
+                    style={{
+                        padding: '10px 15px',
+                        borderRadius: '20px',
+                        border: 'none',
+                        backgroundColor: '#007bff',
+                        color: 'white',
+                        cursor: isSendDisabled ? 'not-allowed' : 'pointer',
+                        opacity: isSendDisabled ? 0.6 : 1 // Visual cue for disabled state
+                    }}
                 >
                     Send
                 </button>

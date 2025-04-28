@@ -1,5 +1,4 @@
-import React, { useState } from 'react';
-// Import useNavigate
+import React, { useState, useEffect } from 'react'; // Add useEffect
 import { Routes, Route, useNavigate } from 'react-router-dom';
 import { GoogleLogin, googleLogout } from '@react-oauth/google';
 import { jwtDecode } from "jwt-decode";
@@ -7,12 +6,43 @@ import CollegeTransferForm from './components/CollegeTransferForm';
 import AgreementViewerPage from './components/AgreementViewerPage';
 import CourseMap from './components/CourseMap';
 import './App.css';
+import { fetchData } from './services/api'; // Import fetchData
 
-// Define a key for localStorage
+// --- Stripe Imports ---
+import { loadStripe } from '@stripe/stripe-js';
+
+// Load Stripe outside component to avoid recreating on render
+const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY);
+// --- End Stripe Imports ---
+
+
 const USER_STORAGE_KEY = 'collegeTransferUser';
 
+// --- Simple Payment Status Components ---
+const PaymentSuccess = () => {
+    // You could fetch session details here to show more info if needed
+    return (
+        <div style={{ padding: '20px', textAlign: 'center' }}>
+            <h2>Payment Successful!</h2>
+            <p>Your subscription is now active. Thank you!</p>
+            <a href="/">Go to Home</a>
+        </div>
+    );
+};
+
+const PaymentCancel = () => {
+    return (
+        <div style={{ padding: '20px', textAlign: 'center' }}>
+            <h2>Payment Cancelled</h2>
+            <p>Your payment process was cancelled. You can try again anytime.</p>
+            <a href="/">Go to Home</a>
+        </div>
+    );
+};
+// --- End Payment Status Components ---
+
+
 function App() {
-  // Initialize user state from localStorage on initial load
   const [user, setUser] = useState(() => {
     try {
       const storedUser = localStorage.getItem(USER_STORAGE_KEY);
@@ -47,9 +77,43 @@ function App() {
     return null; // Default to null
   });
 
-  const navigate = useNavigate(); // Get navigate function
+  // --- Add User Tier State ---
+  const [userTier, setUserTier] = useState('free'); // Default to free
+  const [isLoadingTier, setIsLoadingTier] = useState(false);
+  // --- End User Tier State ---
 
-  // Function to handle successful login
+  const navigate = useNavigate();
+
+  // --- Fetch User Status/Tier ---
+  useEffect(() => {
+      if (user && user.idToken) {
+          setIsLoadingTier(true);
+          fetchData('user-status', {
+              headers: { 'Authorization': `Bearer ${user.idToken}` }
+          })
+          .then(data => {
+              if (data && data.tier) {
+                  setUserTier(data.tier);
+                  console.log("User tier:", data.tier);
+              } else {
+                  console.warn("Could not fetch user tier:", data?.error);
+                  setUserTier('free'); // Fallback
+              }
+          })
+          .catch(err => {
+              console.error("Error fetching user status:", err);
+              setUserTier('free'); // Fallback on error
+          })
+          .finally(() => {
+              setIsLoadingTier(false);
+          });
+      } else {
+          setUserTier('free'); // Not logged in, definitely free tier
+      }
+  }, [user]); // Re-fetch when user logs in/out
+  // --- End Fetch User Status/Tier ---
+
+
   const handleLoginSuccess = (credentialResponse) => {
     console.log("Google Login Success:", credentialResponse);
     try {
@@ -76,15 +140,16 @@ function App() {
       setUser(null);
       localStorage.removeItem(USER_STORAGE_KEY); // Clear storage on error
     }
+    // User state update will trigger the useEffect to fetch tier
   };
 
   const handleLoginError = () => {
     console.error("Google Login Failed");
     setUser(null);
     localStorage.removeItem(USER_STORAGE_KEY); // Clear storage on login error
+    setUserTier('free'); // Reset tier on login error
   };
 
-  // Function to handle logout
   const handleLogout = () => {
     googleLogout(); // Clear Google session
     setUser(null); // Clear React state
@@ -99,7 +164,49 @@ function App() {
 
     console.log("User logged out");
     navigate('/');
+    setUserTier('free'); // Reset tier on logout
   };
+
+  // --- Handle Upgrade Click ---
+  const handleUpgradeClick = async () => {
+      if (!user || !user.idToken) {
+          alert("Please log in to upgrade.");
+          return;
+      }
+
+      try {
+          console.log("Requesting checkout session...");
+          // Call your backend to create the checkout session
+          const response = await fetchData('create-checkout-session', {
+              method: 'POST',
+              headers: {
+                  'Authorization': `Bearer ${user.idToken}`,
+                  'Content-Type': 'application/json' // Ensure content type is set if sending body (though not needed here)
+              },
+              // body: JSON.stringify({ priceId: 'YOUR_STRIPE_PRICE_ID' }) // If sending priceId from frontend
+          });
+
+          if (response && response.sessionId) {
+              console.log("Received session ID:", response.sessionId);
+              const stripe = await stripePromise;
+              const { error } = await stripe.redirectToCheckout({
+                  sessionId: response.sessionId,
+              });
+              // If `redirectToCheckout` fails due to browser blocking, display an error
+              if (error) {
+                  console.error("Stripe redirect failed:", error);
+                  alert(`Payment redirect failed: ${error.message}`);
+              }
+          } else {
+              throw new Error(response?.error || "Failed to get checkout session ID.");
+          }
+      } catch (error) {
+          console.error("Upgrade failed:", error);
+          alert(`Could not initiate payment: ${error.message}`);
+      }
+  };
+  // --- End Handle Upgrade Click ---
+
 
   return (
     <>
@@ -125,12 +232,25 @@ function App() {
         <div>
           {user ? (
             <>
-              <span style={{ marginRight: '10px', fontSize: '0.9em' }}>Welcome, {user.name || user.email}!</span>
-              {/* Style the logout button similarly */}
-              <button 
-                onClick={handleLogout}
-                className="btn btn-danger"
-              >
+              <span style={{ marginRight: '10px', fontSize: '0.9em' }}>
+                  Welcome, {user.name || user.email}!
+                  {/* Display Tier */}
+                  {!isLoadingTier && ` (Tier: ${userTier})`}
+                  {isLoadingTier && ` (Loading tier...)`}
+              </span>
+
+              {/* Conditionally show Upgrade Button */}
+              {userTier === 'free' && !isLoadingTier && (
+                  <button
+                      onClick={handleUpgradeClick}
+                      className="btn btn-success" // Use a different color for upgrade
+                      style={{ margin: '0 10px' }}
+                  >
+                      Upgrade to Paid
+                  </button>
+              )}
+
+              <button onClick={handleLogout} className="btn btn-danger">
                 Logout
               </button>
             </>
@@ -138,7 +258,6 @@ function App() {
             <GoogleLogin
               onSuccess={handleLoginSuccess}
               onError={handleLoginError}
-              // Note: Styling the GoogleLogin button directly might require specific props or wrapper elements
             />
           )}
         </div>
@@ -149,13 +268,17 @@ function App() {
         <Route path="/" element={<CollegeTransferForm />} />
         <Route
           path="/agreement/:sendingId/:receivingId/:yearId"
-          element={<AgreementViewerPage />}
+          // Pass user and tier to AgreementViewerPage
+          element={<AgreementViewerPage user={user} userTier={userTier} />}
         />
         <Route
           path="/course-map"
           // Always render CourseMap, pass user (null if not logged in)
           element={<CourseMap user={user} />}
         />
+        {/* Add routes for payment status */}
+        <Route path="/payment-success" element={<PaymentSuccess />} />
+        <Route path="/payment-cancel" element={<PaymentCancel />} />
       </Routes>
     </>
   );

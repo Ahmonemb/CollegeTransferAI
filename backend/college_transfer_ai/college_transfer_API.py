@@ -9,7 +9,7 @@ class CollegeTransferAPI:
     def __init__(self):
         self.base_url = "https://assist.org/api/"
 
-    def get_academic_years(self):
+    def get_academic_year(self, id):
         url = self.base_url + "AcademicYears"
         response = requests.get(url)
         
@@ -26,8 +26,31 @@ class CollegeTransferAPI:
         for year in result_academic_years:
             academic_year = (str(year['FallYear'] - 1) + "-" + str(year['FallYear']))
             if academic_year == "2025-2026": continue
-            academic_years_dict[academic_year] = year['Id'] - 1   
+            academic_years_dict[year['Id'] - 1] = academic_year
         
+        return academic_years_dict[id] if id in academic_years_dict else None
+
+
+    def get_academic_years(self, sending_institution_id, receiving_institution_id):
+        url = f"{self.base_url}/institutions/{sending_institution_id}/agreements"
+        
+        response = requests.get(url)
+        
+        institutions_dict = {}
+        
+        academic_years_dict = {}
+        
+        if response.status_code == 200:
+            json_response = response.json()
+            institutions_dict = json_response
+        else:
+            raise Exception("Failed to fetch academic years")
+        
+        for institution in institutions_dict:
+            if institution["institutionParentId"] == receiving_institution_id:
+                for year_id in institution["receivingYearIds"]:
+                    academic_years_dict[self.get_academic_year(year_id)] = year_id
+            
         return academic_years_dict
 
     def get_college_from_id(self, id):
@@ -118,6 +141,8 @@ class CollegeTransferAPI:
 
         result_json = {}
 
+        print("KEY AND URL: ",key, url)
+
         # Convert the response to JSON and write it to a file
         try:
             json_data = result.json()
@@ -177,6 +202,7 @@ class CollegeTransferAPI:
     
     
     def get_articulation_agreement(self, academic_year_id, sending_institution_id, receiving_institution_id, key):
+        print(f"Fetching articulation agreement for key: {key}")
         try: # Wrap more of the logic for better error handling
             college_name = self.get_college_from_id(sending_institution_id)
             receiving_name = self.get_college_from_id(receiving_institution_id)
@@ -215,8 +241,7 @@ class CollegeTransferAPI:
 
             # --- Construct URL (same as before) ---
             viewBy = "major"
-            if "Department" in key:
-                viewBy = "dept" 
+             
 
             url = (
                 f"https://assist.org/transfer/results?year={academic_year_id}"
@@ -225,6 +250,25 @@ class CollegeTransferAPI:
                 f"&agreementType=to&viewAgreementsOptions=true&view=agreement"
                 f"&viewBy={viewBy}&viewSendingAgreements=false&viewByKey={key}"
             )
+            
+            if "Department" in key:
+                viewBy = "dept"
+                if "SendingDepartment" in key:
+                    url = (
+                        f"https://assist.org/transfer/results?year={academic_year_id}"
+                        f"&institution={sending_institution_id}"
+                        f"&agreement={receiving_institution_id}"
+                        f"&agreementType=to&viewAgreementsOptions=true&view=agreement"
+                        f"&viewBy={viewBy}&viewByKey={key}&viewSendingAgreements=true"
+                    )
+                else:
+                    url = (
+                        f"https://assist.org/transfer/results?year={academic_year_id}"
+                        f"&institution={sending_institution_id}"
+                        f"&agreement={receiving_institution_id}"
+                        f"&agreementType=to&viewAgreementsOptions=true&view=agreement"
+                        f"&viewBy={viewBy}&viewByKey={key}"
+                    )
             print(f"Attempting to fetch PDF from URL: {url}")
 
             # --- Download PDF using Playwright (same as before) ---
