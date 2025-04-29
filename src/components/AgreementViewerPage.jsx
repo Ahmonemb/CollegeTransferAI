@@ -131,25 +131,39 @@ function AgreementViewerPage({ user, userTier }) {
 
     // --- Effect for Countdown Timer ---
     useEffect(() => {
-        if (!usageStatus.resetTime) {
-            setCountdown('');
+        if (!usageStatus.resetTime || agreementData.length === 0 || isLoadingPdf) {
+            setCountdown(''); // Clear countdown if conditions aren't met
+            return; // Exit effect
+        }
+        console.log("Starting countdown timer as agreement is loaded."); // Add log
+
+        // Calculate initial remaining time immediately
+        const initialRemaining = formatRemainingTime(usageStatus.resetTime);
+        setCountdown(initialRemaining);
+
+        // If already reset, don't start interval
+        if (initialRemaining === 'Usage reset') {
             return;
         }
 
+        // Start the interval to update every second
         const intervalId = setInterval(() => {
             const remaining = formatRemainingTime(usageStatus.resetTime);
             setCountdown(remaining);
             if (remaining === 'Usage reset') {
                 clearInterval(intervalId);
                 // Optionally refetch status after reset?
+                // fetchStatus(); // You might need to define fetchStatus outside its effect or pass it down
             }
         }, 1000); // Update every second
 
-        // Initial calculation
-        setCountdown(formatRemainingTime(usageStatus.resetTime));
-
-        return () => clearInterval(intervalId); // Cleanup interval on unmount or resetTime change
-    }, [usageStatus.resetTime]);
+        // Cleanup interval on unmount or when dependencies change causing the effect to re-run
+        return () => {
+            console.log("Clearing countdown interval."); // Add log for cleanup
+            clearInterval(intervalId);
+        }
+    // Add agreementData and isLoadingPdf as dependencies
+    }, [usageStatus.resetTime, agreementData, isLoadingPdf]);
     // --- End Countdown Effect ---
 
 
@@ -183,7 +197,7 @@ function AgreementViewerPage({ user, userTier }) {
             }
 
             try {
-                const data = await fetchData(`majors?sendingInstitutionId=${initialSendingId}&receivingInstitutionId=${receivingId}&academicYearId=${yearId}&categoryCode=${category}`);
+                const data = await fetchData(`majors?sendingId=${initialSendingId}&receivingId=${receivingId}&academicYearId=${yearId}&categoryCode=${category}`);
                 return data && Object.keys(data).length > 0;
             } catch (err) {
                 console.error(`Error checking availability for ${category}:`, err);
@@ -255,7 +269,7 @@ function AgreementViewerPage({ user, userTier }) {
 
         const fetchCategoryData = async () => {
             try {
-                const data = await fetchData(`majors?sendingInstitutionId=${initialSendingId}&receivingInstitutionId=${receivingId}&academicYearId=${yearId}&categoryCode=${selectedCategory}`);
+                const data = await fetchData(`majors?sendingId=${initialSendingId}&receivingId=${receivingId}&academicYearId=${yearId}&categoryCode=${selectedCategory}`);
                 console.log(`API response for ${selectedCategory}:`, data);
 
                 if (data && Object.keys(data).length > 0) {
@@ -682,6 +696,7 @@ function AgreementViewerPage({ user, userTier }) {
                         allSendingInstitutionIds={allSelectedSendingInstitutions.map(inst => inst.id)}
                         receivingInstitutionId={receivingId}
                         academicYearId={yearId}
+                        user={user}
                     />
                 </div>
 

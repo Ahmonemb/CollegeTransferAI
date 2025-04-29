@@ -46,14 +46,15 @@ class CollegeTransferAPI:
         else:
             raise Exception("Failed to fetch academic years")
         
+        
         for institution in institutions_dict:
             if institution["institutionParentId"] == receiving_institution_id:
                 for year_id in institution["receivingYearIds"]:
                     academic_years_dict[self.get_academic_year(year_id)] = year_id
-            
+         
         return academic_years_dict
 
-    def get_college_from_id(self, id):
+    def get_institution_name(self, id):
         url = "https://assist.org/api/institutions"
 
         result = requests.get(url)
@@ -87,7 +88,7 @@ class CollegeTransferAPI:
                 if idx == "Id" and value == id:
                     return str(k["FallYear"]) + "-" + str(k["FallYear"] + 1)
                 
-    def get_all_majors(self, sending_institution_id, receiving_institution_id, academic_year_id, category_code):
+    def get_majors_or_departments(self, sending_institution_id, receiving_institution_id, academic_year_id, category_code):
         # Define the parameters
         # sending_institution_id = 61
         # receiving_institution_id = 79
@@ -204,8 +205,11 @@ class CollegeTransferAPI:
     def get_articulation_agreement(self, academic_year_id, sending_institution_id, receiving_institution_id, key):
         print(f"Fetching articulation agreement for key: {key}")
         try: # Wrap more of the logic for better error handling
-            college_name = self.get_college_from_id(sending_institution_id)
-            receiving_name = self.get_college_from_id(receiving_institution_id)
+            
+            print(f"Academic Year ID: {academic_year_id}, Sending Institution ID: {sending_institution_id}, Receiving Institution ID: {receiving_institution_id}")
+            
+            college_name = self.get_institution_name(sending_institution_id)
+            receiving_name = self.get_institution_name(receiving_institution_id)
             major_name = self.get_major_from_key(key)
             year_name = self.get_year_from_id(academic_year_id)
 
@@ -269,6 +273,7 @@ class CollegeTransferAPI:
                         f"&agreementType=to&viewAgreementsOptions=true&view=agreement"
                         f"&viewBy={viewBy}&viewByKey={key}"
                     )
+            
             print(f"Attempting to fetch PDF from URL: {url}")
 
             # --- Download PDF using Playwright (same as before) ---
@@ -292,17 +297,6 @@ class CollegeTransferAPI:
 
             # --- Save PDF Locally ---
             if pdf_bytes:
-                # local_pdf_path = f"./{filename}" # Save in the current directory where the script runs
-                # try:
-                #     with open(local_pdf_path, "wb") as f_local: # Open in binary write mode
-                #         f_local.write(pdf_bytes)
-                #     print(f"Successfully saved PDF locally to: {local_pdf_path}")
-                # except Exception as local_save_err:
-                #     print(f"Error saving PDF locally to {local_pdf_path}: {local_save_err}")
-                #     # Decide if you still want to proceed with GridFS or return failure
-                #     client.close()
-                #     return None # Indicate failure if local save fails
-
                 # --- Save to GridFS (Optional - keep or remove) ---
                 try:
                     fs.put(pdf_bytes, filename=filename, contentType='application/pdf')
@@ -327,5 +321,3 @@ class CollegeTransferAPI:
             if 'client' in locals() and client:
                  client.close()
             return None # Indicate failure
-
-api = CollegeTransferAPI()

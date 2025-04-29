@@ -86,31 +86,52 @@ function App() {
 
   // --- Fetch User Status/Tier ---
   useEffect(() => {
-      if (user && user.idToken) {
-          setIsLoadingTier(true);
-          fetchData('user-status', {
-              headers: { 'Authorization': `Bearer ${user.idToken}` }
-          })
-          .then(data => {
-              if (data && data.tier) {
-                  setUserTier(data.tier);
-                  console.log("User tier:", data.tier);
-              } else {
-                  console.warn("Could not fetch user tier:", data?.error);
-                  setUserTier('free'); // Fallback
-              }
-          })
-          .catch(err => {
-              console.error("Error fetching user status:", err);
-              setUserTier('free'); // Fallback on error
-          })
-          .finally(() => {
-              setIsLoadingTier(false);
-          });
-      } else {
-          setUserTier('free'); // Not logged in, definitely free tier
-      }
-  }, [user]); // Re-fetch when user logs in/out
+    // Function to fetch status
+    const fetchUserStatus = () => {
+        if (user && user.idToken) {
+            setIsLoadingTier(true);
+            fetchData('user-status', {
+                headers: { 'Authorization': `Bearer ${user.idToken}` }
+            })
+            .then(data => {
+                if (data && data.tier) {
+                    setUserTier(data.tier);
+                    console.log("User tier updated:", data.tier); // Log update
+                } else {
+                    console.warn("Could not fetch user tier:", data?.error);
+                    setUserTier('free'); // Fallback
+                }
+            })
+            .catch(err => {
+                console.error("Error fetching user status:", err);
+                setUserTier('free'); // Fallback on error
+            })
+            .finally(() => {
+                setIsLoadingTier(false);
+            });
+        } else {
+            // If no user, ensure tier is reset to free and not loading
+            setUserTier('free');
+            setIsLoadingTier(false);
+        }
+    };
+
+    // Call fetchUserStatus immediately when the effect runs
+    fetchUserStatus();
+
+    // OPTIONAL: Add a listener to refetch when the window gains focus
+    // This helps if the user switches tabs and comes back after the webhook has processed
+    window.addEventListener('focus', fetchUserStatus);
+
+    // Cleanup listener on unmount or when user changes
+    return () => {
+        window.removeEventListener('focus', fetchUserStatus);
+    };
+
+  // Re-run this effect ONLY when the user object (specifically idToken) changes.
+  // The fetchUserStatus function itself will handle the logic based on the current user state.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.idToken]); // Depend only on user.idToken
   // --- End Fetch User Status/Tier ---
 
 
@@ -246,7 +267,7 @@ function App() {
                       className="btn btn-success" // Use a different color for upgrade
                       style={{ margin: '0 10px' }}
                   >
-                      Upgrade to Paid
+                      Upgrade to Premium
                   </button>
               )}
 

@@ -150,7 +150,7 @@ ${overallContextInfo ? `**Overall Context:** ${overallContextInfo}` : ''}
 
 Analyze the provided agreement images thoroughly. Perform the following steps:
 1.  **Focus on the Current Context:** Analyze the agreement for the major between the **current sending institution** and the receiving institution.
-2.  **Explicitly state the current context:** Start your response with: "Analyzing the agreement for the *[Major Name]* major between [Current Sending ID] (bold) and [Receiving ID] (bold) for the [Year] (bold) academic year."
+2.  **Explicitly state the current context:** Start your response with: "Analyzing the agreement for the [Major Name] (bold) major between [Current Sending Instituion Name] (bold) and [Receiving Institution Name] (bold) for the [academic year name] (bold) academic year."
 3.  **Provide a concise summary** of the key details for the **current** agreement (articulated courses, requirements, etc.). Identify any required courses for the major at the receiving institution that are **not articulated** by the current sending institution.
 4.  **Compare Articulation (If Applicable):** If you identified non-articulated courses in step 3 AND other sending institutions were selected (see Overall Context), examine the provided images for the **other** agreements (Sending IDs: ${allSendingInstitutionIds.filter(id => id !== sendingInstitutionId).join(', ') || 'None'}). For each non-articulated course from the current agreement, state whether it **is articulated** by any of the **other** sending institutions based on their respective agreements. Present this comparison clearly, perhaps in a separate section or list.
 5.  **Suggest Next Steps:** Conclude with relevant advice or next steps for the student based on the analysis and comparison.
@@ -281,15 +281,17 @@ Analyze the provided agreement images thoroughly. Perform the following steps:
     };
 
     // Disable input/button if loading OR if user is not logged in
-    const isInteractionDisabled = isLoading || !user;
+    const isInteractionDisabled = isLoading || !user || !imageFilenames || imageFilenames.length === 0;
     const isSendDisabled = isInteractionDisabled || !userInput.trim();
 
-    // Adjust placeholder based on loading state, user state, and if messages exist
+    // Adjust placeholder based on loading state, user state, and agreement context
     const placeholderText = !user
         ? "Please sign in to use the chat feature."
-        : isLoading
-            ? (messages.length === 0 ? "Analyzing agreement..." : "Thinking...")
-            : (messages.length === 0 ? "Select an agreement to start." : "Ask a follow-up question...");
+        : (!imageFilenames || imageFilenames.length === 0)
+            ? "Select a major/department to chat." // New placeholder for logged-in user without context
+            : isLoading
+                ? (messages.length === 0 ? "Analyzing agreement..." : "Thinking...")
+                : "Ask a follow-up question..."; // Placeholder when ready
 
 
     return (
@@ -343,7 +345,7 @@ Analyze the provided agreement images thoroughly. Perform the following steps:
                 {/* --- Show Sign-in Prompt if user is not logged in --- */}
                 {!user && (
                     <div style={{ textAlign: 'center', color: '#6c757d', marginTop: '30px', padding: '20px', fontSize: '1.1em' }}>
-                        Please sign in to analyze agreements and chat with the AI assistant.
+                        Please sign in to analyze agreements and chat with the AI counselor.
                     </div>
                 )}
                 {/* --- End Sign-in Prompt --- */}

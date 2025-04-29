@@ -29,9 +29,6 @@ export default defineConfig(({ mode }) => {
           target: 'http://127.0.0.1:5000', // Your Flask backend address
           changeOrigin: true, // Recommended for virtual hosted sites
           secure: false, // Set to true if your backend uses HTTPS with a valid cert
-          // --- Add rewrite rule ---
-          rewrite: (path) => path.replace(/^\/api/, ''), // Remove /api prefix
-          // --- End rewrite rule ---
         },
       },
     },

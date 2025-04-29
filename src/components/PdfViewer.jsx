@@ -3,14 +3,11 @@ import React from 'react';
 // Accept imageFilenames directly as a prop
 function PdfViewer({ imageFilenames, isLoading, error, filename }) { // Added isLoading, error, filename for context messages
 
-  // Log props on every render
-  console.log("PdfViewer Render - isLoading:", isLoading, "error:", error, "filename:", filename, "imageFilenames:", imageFilenames);
-
   // Render content based on props
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       {/* Show messages passed from parent */}
-      {!filename && <p style={{ textAlign: 'center', marginTop: '2em' }}>Select a major to view the agreement.</p>}
+      {!filename && <p style={{ textAlign: 'center', marginTop: '2em' }}>Select a major/department to view the agreement.</p>}
       {isLoading && <p>Loading agreement images...</p>}
       {error && <p style={{ color: 'red' }}>Error loading agreement: {error}</p>}
 
@@ -28,7 +25,6 @@ function PdfViewer({ imageFilenames, isLoading, error, filename }) { // Added is
             padding: '5px'
           }}
         >
-          {console.log("PdfViewer: Conditions met, attempting to map imageFilenames:", imageFilenames)} {/* <-- UPDATED LOG */}
           {imageFilenames.map((imgFilename) => {
             const imageUrl = `/api/image/${imgFilename}`;
             // console.log("Rendering image:", imageUrl); // Keep this if needed
