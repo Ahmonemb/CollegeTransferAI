@@ -129,42 +129,57 @@ function AgreementViewerPage({ user, userTier }) {
 
     }, [user, userTier]); // Re-fetch when user object changes
 
-    // --- Effect for Countdown Timer ---
+    // --- Effect to SET Initial Countdown Value ---
     useEffect(() => {
-        if (!usageStatus.resetTime || agreementData.length === 0 || isLoadingPdf) {
-            setCountdown(''); // Clear countdown if conditions aren't met
-            return; // Exit effect
+        // Set the initial display value only when all conditions are met
+        if (usageStatus.resetTime && agreementData.length > 0 && !isLoadingPdf) {
+            const initialRemaining = formatRemainingTime(usageStatus.resetTime);
+            setCountdown(initialRemaining);
+            console.log("Setting initial countdown display:", initialRemaining);
+        } else {
+            // Clear the display if conditions aren't met (e.g., loading, no reset time)
+            setCountdown('');
+            console.log("Clearing countdown display because conditions not met.");
         }
-        console.log("Starting countdown timer as agreement is loaded."); // Add log
+    // This effect runs when the conditions required to *start* the display change
+    }, [usageStatus.resetTime, agreementData, isLoadingPdf]);
 
-        // Calculate initial remaining time immediately
-        const initialRemaining = formatRemainingTime(usageStatus.resetTime);
-        setCountdown(initialRemaining);
-
-        // If already reset, don't start interval
-        if (initialRemaining === 'Usage reset') {
-            return;
+    // --- Effect to RUN the Countdown Interval ---
+    useEffect(() => {
+        // Only manage the interval based on the existence of a reset time
+        if (!usageStatus.resetTime) {
+            setCountdown(''); // Ensure countdown is cleared if resetTime becomes invalid/null
+            return; // Don't start interval if no reset time
         }
 
-        // Start the interval to update every second
+        // Check if already reset initially when this effect runs
+        const initialCheck = formatRemainingTime(usageStatus.resetTime);
+        if (initialCheck === 'Usage reset') {
+            setCountdown(initialCheck); // Ensure display shows 'Usage reset'
+            return; // Don't start interval if already reset
+        }
+
+        console.log("Starting countdown interval timer.");
         const intervalId = setInterval(() => {
             const remaining = formatRemainingTime(usageStatus.resetTime);
-            setCountdown(remaining);
+            setCountdown(remaining); // Update display every second
+
             if (remaining === 'Usage reset') {
+                console.log("Countdown reached reset time, clearing interval.");
                 clearInterval(intervalId);
-                // Optionally refetch status after reset?
-                // fetchStatus(); // You might need to define fetchStatus outside its effect or pass it down
+                // Optionally refetch status here if needed after reset
+                // fetchStatus(); // Make sure fetchStatus is accessible if you uncomment this
             }
         }, 1000); // Update every second
 
-        // Cleanup interval on unmount or when dependencies change causing the effect to re-run
+        // Cleanup interval ONLY when the component unmounts or resetTime changes
         return () => {
-            console.log("Clearing countdown interval."); // Add log for cleanup
+            console.log("Clearing countdown interval due to unmount or resetTime change.");
             clearInterval(intervalId);
-        }
-    // Add agreementData and isLoadingPdf as dependencies
-    }, [usageStatus.resetTime, agreementData, isLoadingPdf]);
-    // --- End Countdown Effect ---
+        };
+    }, [usageStatus.resetTime]); // Only depend on resetTime for the interval itself
+
+    // --- End Countdown Effects ---
 
 
     // --- Existing Effects (Availability, Fetching Majors - adjust dependencies) ---
