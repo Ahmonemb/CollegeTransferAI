@@ -67,7 +67,9 @@ function formatText(text) {
 
 // Accept new props for context
 function ChatInterface({
-    imageFilenames, // This now contains images from ALL agreements for the initial call
+    allContextImageFilenames, // <-- NEW: Combined list for payload
+    imageFilenames, // Keep if needed for display logic or initial prompt details
+    // allAgreementsImageFilenames, // Keep if needed for initial prompt details
     selectedMajorName,
     userName, // Keep userName prop for display when logged in
     isMajorsVisible,
@@ -120,7 +122,7 @@ function ChatInterface({
         // - Analysis hasn't been sent for this context yet.
         // - We are not currently loading anything (prevents race conditions).
         // - User is logged in (checked above)
-        if (imageFilenames && imageFilenames.length > 0 && !initialAnalysisSentRef.current && !isLoading) {
+        if (allContextImageFilenames && allContextImageFilenames.length > 0 && !initialAnalysisSentRef.current && !isLoading) {
 
             const sendInitialAnalysis = async () => {
                 // User/token check is still good practice here, though the outer effect also checks
@@ -150,12 +152,17 @@ ${overallContextInfo ? `**Overall Context:** ${overallContextInfo}` : ''}
 
 Analyze the provided agreement images thoroughly. Perform the following steps:
 1.  **Focus on the Current Context:** Analyze the agreement for the major between the **current sending institution** and the receiving institution.
-2.  **Explicitly state the current context:** Start your response with: "Analyzing the agreement for the [Major Name] (bold) major between [Current Sending Instituion Name] (bold) and [Receiving Institution Name] (bold) for the [academic year name] (bold) academic year."
-3.  **Provide a concise summary** of the key details for the **current** agreement (articulated courses, requirements, etc.). Identify any required courses for the major at the receiving institution that are **not articulated** by the current sending institution.
-4.  **Compare Articulation (If Applicable):** If you identified non-articulated courses in step 3 AND other sending institutions were selected (see Overall Context), examine the provided images for the **other** agreements (Sending IDs: ${allSendingInstitutionIds.filter(id => id !== sendingInstitutionId).join(', ') || 'None'}). For each non-articulated course from the current agreement, state whether it **is articulated** by any of the **other** sending institutions based on their respective agreements. Present this comparison clearly, perhaps in a separate section or list.
+2.  **Explicitly state the current context:** Start your response with: "Analyzing the agreement for the **[Major Name]** major between **[Current Sending Institution Name]** and **[Receiving Institution Name]** for the **[academic year name]** academic year." (Replace bracketed placeholders with actual names/year).
+3.  **Provide a detailed, accurate, yet concise summary** of the key details for the **current** agreement. This summary should include:
+    *   All articulated courses (sending course -> receiving course).
+    *   Any specific GPA requirements mentioned.
+    *   Any other critical requirements or notes from the agreement.
+    *   Crucially, identify any required courses for the major at the receiving institution that are **not articulated** by the current sending institution according to this agreement. List these clearly.
+4.  **Compare Articulation (If Applicable):** If you identified non-articulated courses in step 3 AND other sending institutions were selected (see Overall Context), examine the provided images for the **other** agreements (Sending IDs: ${allSendingInstitutionIds.filter(id => id !== sendingInstitutionId).join(', ') || 'None'}). For each non-articulated course from the current agreement, state whether it **is articulated** by any of the **other** sending institutions based on their respective agreements. Present this comparison clearly, perhaps in a separate section or list (e.g., "Comparison with Other Selected Colleges:").
 5.  **Suggest Next Steps:** Conclude with relevant advice or next steps for the student based on the analysis and comparison.
+6.  **Offer Education Plan:** After providing the analysis and next steps, ask the user: "Would you like me to generate a potential 2-year education plan based on this information? This plan would outline courses semester-by-semester (Fall, Spring, Summer) aiming for approximately 4 classes per Fall/Spring semester and 2 classes during the Summer, incorporating courses from the [Sending Institution(s) names](bold) to meet the requirements for the [Receiving Institution name] (bold)."
 
-**Formatting:** Use bullet points (* or -) for lists, **bold** for emphasis, and \`italic\` for course codes/titles.`;
+**Formatting:** Use bullet points (* or -) for lists, **bold** for emphasis (especially names and key terms), and \`italic\` for course codes/titles. Ensure the summary in step 3 is well-organized and easy to read.`;
                 // --- End MODIFIED Initial Prompt ---
 
                 // Display a system message while analysis runs
@@ -164,7 +171,7 @@ Analyze the provided agreement images thoroughly. Perform the following steps:
                 const payload = {
                     new_message: initialPrompt,
                     history: [], // No history for the very first message
-                    image_filenames: imageFilenames // Send the combined list of images
+                    image_filenames: allContextImageFilenames // <-- USE COMBINED LIST
                 };
 
                 try {
@@ -209,7 +216,7 @@ Analyze the provided agreement images thoroughly. Perform the following steps:
         // This effect depends on imageFilenames to know when context is ready,
         // and isLoading to avoid running while another request is in progress.
         // Also depends on user to re-evaluate if user logs in/out
-    }, [imageFilenames, isLoading, selectedMajorName, sendingInstitutionId, allSendingInstitutionIds, receivingInstitutionId, academicYearId, user]);
+    }, [allContextImageFilenames, isLoading, selectedMajorName, sendingInstitutionId, allSendingInstitutionIds, receivingInstitutionId, academicYearId, user]);
 
 
     const handleSend = async () => {
@@ -241,10 +248,12 @@ Analyze the provided agreement images thoroughly. Perform the following steps:
                 content: msg.text
             }));
 
-        // Payload for subsequent messages (no image_filenames needed)
+        // Payload for subsequent messages - NOW INCLUDES ACTIVE image_filenames
         const payload = {
             new_message: currentInput,
-            history: apiHistory
+            history: apiHistory,
+            // Send the filenames relevant to the currently active view
+            image_filenames: allContextImageFilenames // <-- USE COMBINED LIST
         };
 
         // --- Backend Call ---
@@ -281,14 +290,14 @@ Analyze the provided agreement images thoroughly. Perform the following steps:
     };
 
     // Disable input/button if loading OR if user is not logged in
-    const isInteractionDisabled = isLoading || !user || !imageFilenames || imageFilenames.length === 0;
+    const isInteractionDisabled = isLoading || !user || !allContextImageFilenames || allContextImageFilenames.length === 0;
     const isSendDisabled = isInteractionDisabled || !userInput.trim();
 
     // Adjust placeholder based on loading state, user state, and agreement context
     const placeholderText = !user
         ? "Please sign in to use the chat feature."
-        : (!imageFilenames || imageFilenames.length === 0)
-            ? "Select a major/department to chat." // New placeholder for logged-in user without context
+        : (!allContextImageFilenames || allContextImageFilenames.length === 0)
+            ? "Select a major/department to load agreements and chat." // Updated placeholder
             : isLoading
                 ? (messages.length === 0 ? "Analyzing agreement..." : "Thinking...")
                 : "Ask a follow-up question..."; // Placeholder when ready
