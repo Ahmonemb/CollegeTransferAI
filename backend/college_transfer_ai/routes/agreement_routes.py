@@ -34,7 +34,7 @@ def init_gemini(api_key):
     try:
         genai.configure(api_key=api_key)
         # Consider making model name configurable
-        gemini_model = genai.GenerativeModel('gemini-2.5-flash-preview-04-17')
+        gemini_model = genai.GenerativeModel('gemini-1.5-pro')
         print("--- Gemini Initialized Successfully ---")
     except Exception as e:
         print(f"!!! Gemini Initialization Error: {e}")
