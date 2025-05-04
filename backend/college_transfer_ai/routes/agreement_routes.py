@@ -5,38 +5,40 @@ import fitz # PyMuPDF
 from PIL import Image
 from flask import Blueprint, jsonify, request, Response, current_app
 from bson.objectid import ObjectId
-from datetime import datetime, timezone # Import datetime
 # Remove OpenAI import if not used
 # from openai import OpenAI
 
 # Import necessary functions/objects from other modules
 from ..utils import verify_google_token, get_or_create_user, check_and_update_usage
-# Use getter functions for all collections now
-# from ..database import get_db, get_gridfs, get_agreement_summaries_collection # Removed get_agreement_summaries_collection
-from ..database import get_db, get_gridfs # Updated import
+from ..database import get_db, get_gridfs # Use getter functions
 from ..college_transfer_API import CollegeTransferAPI
-# Import LLM service functions
-from ..llm_service import generate_chat_response as llm_generate_chat_response, init_llm as llm_init_llm
 
-# --- Remove Gemini-specific imports ---
-# import google.generativeai as genai # Removed
-# from PIL import Image # Keep PIL if used elsewhere (e.g., image processing)
-# import io # Keep io if used elsewhere (e.g., image processing)
-# --- End Remove Gemini-specific imports ---
+# --- Google AI Imports ---
+import google.generativeai as genai
+from google.generativeai.types import HarmCategory, HarmBlockThreshold
+# --- End Google AI Imports ---
 
 FREE_TIER_LIMIT = 10
 PREMIUM_TIER_LIMIT = 200 # Example limit for paid users
 
 agreement_bp = Blueprint('agreement_bp', __name__)
 
-# --- Remove Gemini Initialization ---
-# gemini_model = None # Removed
-# safety_settings = [...] # Removed
-# generation_config = ... # Removed
-# def init_gemini(): # Removed
-#     global gemini_model
-#     # ... removed initialization logic ...
-# --- End Remove Gemini Initialization ---
+# --- Initialize Gemini ---
+# Store model in app context instead of global? For now, global is simpler.
+gemini_model = None
+def init_gemini(api_key):
+    global gemini_model
+    if not api_key:
+        print("Warning: GOOGLE_API_KEY not set. Gemini features will be disabled.")
+        return
+    try:
+        genai.configure(api_key=api_key)
+        # Consider making model name configurable
+        gemini_model = genai.GenerativeModel('gemini-2.5-flash-preview-04-17')
+        print("--- Gemini Initialized Successfully ---")
+    except Exception as e:
+        print(f"!!! Gemini Initialization Error: {e}")
+        gemini_model = None # Ensure it's None if init fails
 
 # --- API Instance ---
 # Initialize CollegeTransferAPI here or in create_app if needed globally
@@ -112,18 +114,13 @@ def get_majors():
 @agreement_bp.route('/articulation-agreements', methods=['POST'])
 def get_articulation_agreements():
     data = request.get_json()
-    # sending_ids = data.get('sending_ids') # Expecting a list - Changed key name
-    sending_ids = data.get('sendingInstitutionIds') # Match frontend key
-    # receiving_id = data.get('receiving_id') # Changed key name
-    receiving_id = data.get('receivingInstitutionId') # Match frontend key
-    # year_id = data.get('year_id') # Changed key name
-    year_id = data.get('academicYearId') # Match frontend key
-    major_key = data.get('majorKey') # Match frontend key
+    sending_ids = data.get('sending_ids') # Expecting a list
+    receiving_id = data.get('receiving_id')
+    year_id = data.get('year_id')
+    major_key = data.get('major_key')
 
     if not sending_ids or not isinstance(sending_ids, list) or not receiving_id or not year_id or not major_key:
-        # return jsonify({"error": "Missing or invalid parameters (sending_ids list, receiving_id, year_id, major_key)"}), 400
-        return jsonify({"error": "Missing or invalid parameters (sendingInstitutionIds list, receivingInstitutionId, academicYearId, majorKey)"}), 400
-
+        return jsonify({"error": "Missing or invalid parameters (sending_ids list, receiving_id, year_id, major_key)"}), 400
 
     results = []
     errors = []
@@ -133,17 +130,14 @@ def get_articulation_agreements():
         try:
             # Fetch name first (assuming it's less likely to fail than PDF fetch)
             try:
-                 # Ensure ID is integer if API expects it
-                 sending_name = api.get_institution_name(int(sending_id)) or sending_name
+                 sending_name = api.get_institution_name(sending_id) # Hypothetical method
             except Exception as name_err:
                  print(f"Warning: Could not fetch name for sending ID {sending_id}: {name_err}")
 
-            # Ensure IDs are integers if API expects it
-            pdf_filename = api.get_articulation_agreement(int(year_id), int(sending_id), int(receiving_id), major_key)
-
+            pdf_filename = api.get_articulation_agreement(year_id, sending_id, receiving_id, major_key)
 
             results.append({
-                 "sendingId": sending_id, # Keep original ID format from request
+                 "sendingId": sending_id,
                  "sendingName": sending_name,
                  "pdfFilename": pdf_filename # Will be None if not found
             })
@@ -160,7 +154,7 @@ def get_articulation_agreements():
             # For now, just add to errors list. The loop continues.
             # Ensure name is included even on error
             results.append({
-                 "sendingId": sending_id, # Keep original ID format from request
+                 "sendingId": sending_id,
                  "sendingName": sending_name,
                  "pdfFilename": None,
                  "error": str(e) # Add error detail to the specific item
@@ -182,41 +176,6 @@ def get_articulation_agreements():
          # At least one PDF found, potentially with other non-PDF results or errors handled above
          return jsonify({"agreements": results}), 200
 
-# --- NEW IGETC Route ---
-@agreement_bp.route('/igetc-agreement', methods=['GET'])
-def get_igetc_agreement_route():
-    """
-    Fetches the IGETC agreement PDF filename for a given sending institution and year.
-    """
-    academic_year_id = request.args.get('academicYearId')
-    sending_institution_id = request.args.get('sendingId')
-
-    if not academic_year_id or not sending_institution_id:
-        return jsonify({"error": "Missing required parameters (academicYearId, sendingId)"}), 400
-
-    try:
-        # Convert IDs to integers if necessary (depends on your API method)
-        year_id = int(academic_year_id)
-        sending_id = int(sending_institution_id)
-
-        print(f"Fetching IGETC agreement for Sending ID: {sending_id}, Year ID: {year_id}")
-        pdf_filename = api.get_igetc_courses(year_id, sending_id)
-
-        if pdf_filename:
-            print(f"Found/Generated IGETC PDF: {pdf_filename}")
-            return jsonify({"pdfFilename": pdf_filename}), 200
-        else:
-            print(f"Could not find or generate IGETC PDF for Sending ID: {sending_id}, Year ID: {year_id}")
-            return jsonify({"error": "IGETC agreement not found or could not be generated."}), 404
-
-    except ValueError:
-        return jsonify({"error": "Invalid ID format. IDs must be integers."}), 400
-    except Exception as e:
-        error_msg = f"Error fetching IGETC agreement for Sending ID {sending_institution_id}: {e}"
-        print(error_msg)
-        traceback.print_exc()
-        return jsonify({"error": "Failed to fetch IGETC agreement.", "details": str(e)}), 500
-# --- End NEW IGETC Route ---
 
 @agreement_bp.route('/pdf-images/<path:filename>', methods=['GET'])
 def get_pdf_images(filename):
@@ -313,49 +272,123 @@ def get_image(filename):
 
 # --- Chat Endpoint ---
 @agreement_bp.route('/chat', methods=['POST'])
-@verify_google_token
-def handle_chat(user_info):
-    llm_init_llm()
+def chat_endpoint():
+    config = current_app.config['APP_CONFIG']
+    GOOGLE_CLIENT_ID = config.get('GOOGLE_CLIENT_ID')
+    # GOOGLE_API_KEY is implicitly used by genai.configure in init_gemini
 
-    data = request.get_json()
-    new_message = data.get('new_message')
-    history = data.get('history', [])
-    # Always try to get image_filenames from the request
-    image_filenames = data.get('image_filenames') # Could be None or []
+    if not GOOGLE_CLIENT_ID:
+         return jsonify({"error": "Google Client ID not configured."}), 500
+    if not gemini_model: # Check if Gemini was initialized
+         return jsonify({"error": "Chat feature disabled: Gemini model not available."}), 503 # Service Unavailable
 
-    if not new_message:
-        return jsonify({"error": "No message provided"}), 400
+    fs = get_gridfs() # Get GridFS instance
 
-    user_id = user_info.get('user_id')
-    if not user_id:
-         return jsonify({"error": "User ID not found in token"}), 401
-
-    usage_allowed, usage_message = check_and_update_usage(user_id)
-    if not usage_allowed:
-        return jsonify({"error": usage_message}), 429
-
-    # --- Simplified Logic ---
-    # No longer need to distinguish initial vs. follow-up for image handling here
-    print(f"Handling chat message. Including {len(image_filenames) if image_filenames else 0} images.")
-
+    # 1. Authentication & Authorization
     try:
-        # Call the imported LLM function, always passing image_filenames
-        # The llm_service function will handle if image_filenames is None or empty
-        llm_reply = llm_generate_chat_response(new_message, history, image_filenames)
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({"error": "Authorization token missing or invalid"}), 401
+        token = auth_header.split(' ')[1]
+        user_info = verify_google_token(token, GOOGLE_CLIENT_ID)
+        user_data = get_or_create_user(user_info)
 
-        if llm_reply and not llm_reply.startswith("[LLM response blocked"):
-            return jsonify({"reply": llm_reply})
-        elif llm_reply: # Handle block message
-             print(f"LLM response blocked: {llm_reply}")
-             # Return a user-friendly error, maybe masking the specific block reason
-             return jsonify({"error": "Failed to get response due to content restrictions."}), 500
-             # Or return the specific block message if desired:
-             # return jsonify({"error": f"Failed to get response: {llm_reply}"}), 500
-        else:
-            # Handle LLM generation failure (returned None)
-            return jsonify({"error": "Failed to get response from LLM."}), 500
+        # 2. Rate Limiting / Usage Check
+        if not check_and_update_usage(user_data):
+            # Prepare message about limit exceeded, including reset time
+            from datetime import datetime, timedelta, time, timezone # Ensure imports
+            now = datetime.now(timezone.utc)
+            tomorrow = now.date() + timedelta(days=1)
+            tomorrow_midnight_utc = datetime.combine(tomorrow, time(0, 0), tzinfo=timezone.utc)
+            reset_time_str = tomorrow_midnight_utc.strftime('%Y-%m-%d %H:%M:%S %Z')
+            limit = PREMIUM_TIER_LIMIT if user_data.get('tier') == 'premium' else FREE_TIER_LIMIT
+            return jsonify({
+                "error": f"Usage limit ({limit} requests/day) exceeded for your tier ('{user_data.get('tier')}'). Please try again after {reset_time_str}."
+            }), 429 # Too Many Requests
+
+    except ValueError as auth_err:
+        return jsonify({"error": str(auth_err)}), 401
+    except Exception as usage_err:
+        # Handle potential errors from check_and_update_usage (e.g., DB error)
+        print(f"Error during usage check: {usage_err}")
+        traceback.print_exc()
+        return jsonify({"error": "Could not verify usage limits."}), 500
+
+    # 3. Process Request Data
+    data = request.get_json()
+    if not data or 'new_message' not in data:
+        return jsonify({"error": "Missing 'new_message' in request body"}), 400
+
+    new_message_text = data['new_message']
+    history = data.get('history', []) # List of {'role': 'user'/'assistant', 'content': '...'}
+    image_filenames = data.get('image_filenames', []) # Only expected for initial analysis
+
+    # 4. Prepare Content for Gemini
+    prompt_parts = []
+
+    # Add image data if provided (for initial analysis)
+    if image_filenames:
+        print(f"Processing {len(image_filenames)} images for chat...")
+        image_mime_type = "image/png" # Assuming PNG from our generation step
+        for img_filename in image_filenames:
+            try:
+                grid_out = fs.find_one({"filename": img_filename})
+                if grid_out:
+                    image_data = grid_out.read()
+                    prompt_parts.append({"mime_type": image_mime_type, "data": image_data})
+                else:
+                    print(f"Warning: Image '{img_filename}' not found in GridFS.")
+            except Exception as img_err:
+                print(f"Error reading image '{img_filename}' from GridFS: {img_err}")
+                # Decide how to handle missing images - skip or return error?
+                # For now, just skip the missing image
+                # return jsonify({"error": f"Failed to load image {img_filename}"}), 500
+
+    # Add the latest user message text
+    prompt_parts.append(new_message_text)
+
+    # 5. Call Gemini API
+    try:
+        print("Sending request to Gemini...")
+        # Construct conversation history for the API
+        api_history = []
+        for msg in history:
+             # Map 'assistant' role from frontend/db to 'model' for Gemini API
+             role = 'model' if msg.get('role') == 'assistant' else msg.get('role')
+             # Ensure role is valid and content exists
+             if role in ['user', 'model'] and msg.get('content'):
+                 api_history.append({'role': role, 'parts': [msg['content']]})
+
+        # Start chat session if history exists
+        chat_session = gemini_model.start_chat(history=api_history)
+        response = chat_session.send_message(
+            prompt_parts,
+            stream=False, # Set to True for streaming response
+            safety_settings={ # Adjust safety settings as needed
+                HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+                HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+                HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+                HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+            }
+        )
+
+        # Check for safety blocks or empty response
+        if not response.parts:
+             # Investigate response.prompt_feedback if needed
+             print("Gemini response blocked or empty. Feedback:", response.prompt_feedback)
+             try:
+                 # Attempt to access safety ratings safely
+                 safety_feedback = response.prompt_feedback.safety_ratings if response.prompt_feedback else "No feedback available."
+             except Exception as feedback_err:
+                 safety_feedback = f"Error accessing feedback: {feedback_err}"
+             return jsonify({"error": "Response blocked due to safety settings or empty response.", "details": str(safety_feedback)}), 400
+
+        reply_text = response.text
+        print("Received reply from Gemini.")
+        return jsonify({"reply": reply_text})
 
     except Exception as e:
-        print(f"Error during chat processing: {e}")
+        print(f"Error calling Gemini API: {e}")
         traceback.print_exc()
-        return jsonify({"error": f"Server error during chat: {e}"}), 500
+        # Provide a more generic error to the user
+        return jsonify({"error": "Failed to get response from AI assistant."}), 500

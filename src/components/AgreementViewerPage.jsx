@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { useParams, useLocation } from 'react-router-dom';
+import { useParams, useLocation } from 'react-router-dom'; // Import useLocation
 import PdfViewer from './PdfViewer';
 import ChatInterface from './ChatInterface';
 import { fetchData } from '../services/api';
@@ -65,20 +65,13 @@ function AgreementViewerPage({ user, userTier }) {
     const [hasDepartmentsAvailable, setHasDepartmentsAvailable] = useState(true);
     const [isLoadingAvailability, setIsLoadingAvailability] = useState(true);
 
-    // --- MODIFIED State for Multiple PDFs/Tabs ---
-    const [agreementData, setAgreementData] = useState([]);
-    // START WITH IGETC TAB ACTIVE
-    const [activeTabIndex, setActiveTabIndex] = useState(-1); // Index for agreements, -1 for IGETC
-    const [imagesForActivePdf, setImagesForActivePdf] = useState([]);
-    const [allAgreementsImageFilenames, setAllAgreementsImageFilenames] = useState([]);
+    // --- NEW State for Multiple PDFs/Tabs ---
+    const [agreementData, setAgreementData] = useState([]); // Array of { sendingId, sendingName, pdfFilename }
+    const [activeTabIndex, setActiveTabIndex] = useState(0); // Index of the currently viewed PDF/Tab
+    const [imagesForActivePdf, setImagesForActivePdf] = useState([]); // Renamed for clarity
+    const [allAgreementsImageFilenames, setAllAgreementsImageFilenames] = useState([]); // NEW: For initial chat analysis
 
-    // --- NEW State for IGETC ---
-    const [igetcPdfFilename, setIgetcPdfFilename] = useState(null);
-    const [isLoadingIgetc, setIsLoadingIgetc] = useState(false);
-    const [igetcImageFilenames, setIgetcImageFilenames] = useState([]); // <-- ADDED: State for IGETC images
-    // --- End IGETC State ---
-
-    // --- State for User Usage Status ---
+    // --- NEW State for User Usage Status ---
     const [usageStatus, setUsageStatus] = useState({
         usageCount: null,
         usageLimit: null,
@@ -89,12 +82,10 @@ function AgreementViewerPage({ user, userTier }) {
     const [countdown, setCountdown] = useState('');
     // --- End Usage Status State ---
 
-    // --- Derived state for the currently active agreement/view ---
-    const isIgetcActive = activeTabIndex === -1;
-    const currentAgreement = !isIgetcActive ? (agreementData[activeTabIndex] || null) : null;
-    // Use the *first* sending institution for IGETC context, or the current agreement's
-    const contextSendingId = isIgetcActive ? (allSelectedSendingInstitutions[0]?.id || initialSendingId) : (currentAgreement?.sendingId || initialSendingId);
-    const currentPdfFilename = isIgetcActive ? igetcPdfFilename : (currentAgreement?.pdfFilename || null);
+    // --- Derived state for the currently active agreement ---
+    const currentAgreement = agreementData[activeTabIndex] || null;
+    const currentSendingId = currentAgreement?.sendingId || initialSendingId; // Fallback to URL param if needed initially
+    const currentPdfFilename = currentAgreement?.pdfFilename || null;
 
     // --- Effect to Fetch User Usage Status ---
     useEffect(() => {
@@ -151,7 +142,7 @@ function AgreementViewerPage({ user, userTier }) {
             console.log("Clearing countdown display because conditions not met.");
         }
     // This effect runs when the conditions required to *start* the display change
-    }, [usageStatus.resetTime, agreementData, isLoadingPdf, isIgetcActive]); // Added isIgetcActive
+    }, [usageStatus.resetTime, agreementData, isLoadingPdf]);
 
     // --- Effect to RUN the Countdown Interval ---
     useEffect(() => {
@@ -326,101 +317,98 @@ function AgreementViewerPage({ user, userTier }) {
 
     }, [initialSendingId, receivingId, yearId, selectedCategory, isLoadingAvailability, hasMajorsAvailable, hasDepartmentsAvailable]);
 
-    // --- MODIFIED Effect to fetch agreement details AND initial images ---
+    // --- MODIFIED Effect to fetch agreement details AND ALL initial images ---
     const fetchAgreementDetailsAndImages = useCallback(async () => {
-        // REMOVED: setIgetcPdfFilename(null); // Keep IGETC data persistent
-        // REMOVED: if (isIgetcActive) setActiveTabIndex(0); // Don't switch here
-
         if (!selectedMajorKey || allSelectedSendingInstitutions.length === 0 || !receivingId || !yearId) {
-            // Clear only agreement-specific data if no major is selected
             setAgreementData([]);
-            setAllAgreementsImageFilenames([]);
-            // Don't clear imagesForActivePdf if IGETC might be active
-            if (!isIgetcActive) {
-                setImagesForActivePdf([]);
-            }
+            setAllAgreementsImageFilenames([]); // Clear all images
+            setImagesForActivePdf([]); // Clear active images
             return;
         }
 
-        setIsLoadingPdf(true);
+        setIsLoadingPdf(true); // Use this state for the overall loading
         setPdfError(null);
-        setAgreementData([]); // Clear previous agreements
+        setAgreementData([]);
         setAllAgreementsImageFilenames([]);
-        // Don't clear imagesForActivePdf yet, wait until fetch completes or fails
+        setImagesForActivePdf([]);
 
-        let fetchedAgreements = [];
+        let fetchedAgreements = []; // To store results from /articulation-agreements
 
         try {
+            // 1. Fetch PDF filenames for all agreements
             const sendingIds = allSelectedSendingInstitutions.map(inst => inst.id);
             console.log("Fetching agreements list for Sending IDs:", sendingIds, selectedMajorKey);
-            // Assuming the API endpoint takes sendingIds, receivingId, yearId, majorKey
             const response = await fetchData('/articulation-agreements', {
-                method: 'POST', // Or GET with query params, adjust as needed
+                method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    sendingInstitutionIds: sendingIds,
-                    receivingInstitutionId: receivingId,
-                    academicYearId: yearId,
-                    majorKey: selectedMajorKey,
-                    categoryCode: selectedCategory // Pass category if needed by backend
-                })
+                body: JSON.stringify({ sending_ids: sendingIds, receiving_id: receivingId, year_id: yearId, major_key: selectedMajorKey })
             });
 
             if (!response || !Array.isArray(response.agreements)) {
-                throw new Error(response?.error || 'Invalid response format for agreements');
+                throw new Error(response?.error || "Invalid response format from /articulation-agreements");
             }
 
-            // Map response agreements and add sending institution names
+            // Map response to include names
             fetchedAgreements = response.agreements.map(agreement => {
                 const sendingInst = allSelectedSendingInstitutions.find(inst => inst.id === agreement.sendingId);
-                return {
-                    ...agreement, // Spread existing agreement properties (like pdfFilename, sendingId)
-                    sendingName: sendingInst ? sendingInst.name : 'Unknown Sending Institution'
-                };
+                return { ...agreement, sendingName: sendingInst ? sendingInst.name : `Sending ID ${agreement.sendingId}` };
             });
-            setAgreementData(fetchedAgreements); // Set the fetched agreements
+            console.log("Received agreement list:", fetchedAgreements);
+            setAgreementData(fetchedAgreements);
+            setActiveTabIndex(0); // Set first tab active
 
-            // --- Fetch all images in parallel ---
-            // Filter out agreements without a pdfFilename before attempting to fetch images
-            const agreementsWithPdfs = fetchedAgreements.filter(agreement => agreement.pdfFilename);
-            const imageFetchPromises = agreementsWithPdfs.map(agreement =>
-                fetchData(`pdf-images/${encodeURIComponent(agreement.pdfFilename)}`)
-                    .then(imageResponse => ({
-                        sendingId: agreement.sendingId, // Keep track of which agreement these images belong to
-                        images: imageResponse?.image_filenames || [],
-                        error: imageResponse?.error
-                    }))
-                    .catch(err => ({ // Catch fetch errors for individual image sets
-                        sendingId: agreement.sendingId,
-                        images: [],
-                        error: `Failed to fetch images for ${agreement.sendingName}: ${err.message}`
-                    }))
-            );
+            // 2. Fetch image filenames for ALL valid PDFs in parallel
+            const imageFetchPromises = fetchedAgreements
+                .filter(agreement => agreement.pdfFilename) // Only fetch for those with a filename
+                .map(agreement =>
+                    fetchData(`pdf-images/${encodeURIComponent(agreement.pdfFilename)}`)
+                        .then(imgResponse => {
+                            if (imgResponse && imgResponse.image_filenames) {
+                                return { sendingId: agreement.sendingId, images: imgResponse.image_filenames };
+                            } else {
+                                console.warn(`No images found for ${agreement.pdfFilename}`);
+                                return { sendingId: agreement.sendingId, images: [] }; // Return empty array on failure/no images
+                            }
+                        })
+                        .catch(err => {
+                            console.error(`Error fetching images for ${agreement.pdfFilename}:`, err);
+                            return { sendingId: agreement.sendingId, images: [] }; // Return empty array on error
+                        })
+                );
+
             const imageResults = await Promise.allSettled(imageFetchPromises);
-            const allImagesCombined = imageResults.reduce(/* ... */); // Existing logic
+
+            const allImagesCombined = imageResults.reduce((acc, result) => {
+                if (result.status === 'fulfilled' && result.value.images.length > 0) {
+                    // Optionally add context comment for LLM?
+                    // acc.push(`--- Images for Sending ID ${result.value.sendingId} ---`);
+                    acc.push(...result.value.images);
+                }
+                return acc;
+            }, []);
+
+            console.log("Combined image filenames for initial analysis:", allImagesCombined);
             setAllAgreementsImageFilenames(allImagesCombined);
 
-            // --- Set images for the first agreement tab (index 0) ---
+            // 3. Fetch images for the *initially active* PDF (tab 0) for the viewer
             const firstAgreement = fetchedAgreements[0];
-            let firstAgreementImages = [];
             if (firstAgreement && firstAgreement.pdfFilename) {
-                const firstAgreementImagesResult = imageResults.find(/* ... */); // Existing logic to find images for first agreement
+                // Find the corresponding images from the parallel fetch results
+                const firstAgreementImagesResult = imageResults.find(result => result.status === 'fulfilled' && result.value.sendingId === firstAgreement.sendingId);
                 if (firstAgreementImagesResult && firstAgreementImagesResult.value.images.length > 0) {
-                    firstAgreementImages = firstAgreementImagesResult.value.images;
+                     setImagesForActivePdf(firstAgreementImagesResult.value.images);
                 } else {
-                    console.warn(`No images loaded for the first agreement: ${firstAgreement.sendingName}`);
+                     // Handle case where even the first PDF's images failed to load
+                     setPdfError(`Failed to load images for the initial agreement: ${firstAgreement.sendingName}`);
+                     setImagesForActivePdf([]);
                 }
+            } else if (fetchedAgreements.length > 0) {
+                setPdfError(`No PDF filename found for the initial agreement: ${fetchedAgreements[0].sendingName}.`);
+                setImagesForActivePdf([]);
+            } else {
+                setPdfError("No agreements found for the selected major and institutions.");
+                setImagesForActivePdf([]);
             }
-
-            // --- NOW switch to the first agreement tab and set its images ---
-            setActiveTabIndex(0);
-            setImagesForActivePdf(firstAgreementImages);
-            if (firstAgreementImages.length === 0 && firstAgreement) {
-                 setPdfError(`No PDF or images found for ${firstAgreement.sendingName}.`);
-            } else if (!firstAgreement) {
-                 setPdfError("No agreements found for the selected major.");
-            }
-
 
         } catch (err) {
             console.error("Error fetching agreement details and images:", err);
@@ -428,30 +416,26 @@ function AgreementViewerPage({ user, userTier }) {
             setAgreementData([]);
             setAllAgreementsImageFilenames([]);
             setImagesForActivePdf([]);
-            // Optionally switch back to IGETC or show an error state?
-            // setActiveTabIndex(-1); // Or keep it on the (now empty) agreement tab?
         } finally {
             setIsLoadingPdf(false);
         }
+    }, [selectedMajorKey, allSelectedSendingInstitutions, receivingId, yearId]); // Dependencies
 
-    }, [selectedMajorKey, allSelectedSendingInstitutions, receivingId, yearId, selectedCategory, isIgetcActive]); // Added missing dependencies
-
-    // --- MODIFIED Effect to fetch images for the ACTIVE PDF VIEWER (Agreement Tab) ---
-    const fetchImagesForActiveAgreementTab = useCallback(async () => {
-        if (isIgetcActive) return; // Don't run if IGETC is active
-
+    // --- Effect to fetch images ONLY for the ACTIVE PDF VIEWER when tab changes ---
+    const fetchImagesForActiveTab = useCallback(async () => {
         const activeAgreement = agreementData[activeTabIndex];
         if (!activeAgreement || !activeAgreement.pdfFilename) {
-            setImagesForActivePdf([]);
+            setImagesForActivePdf([]); // Clear if no active agreement or filename
             if (activeAgreement) setPdfError(`No PDF available for ${activeAgreement.sendingName}.`);
             return;
         }
-        // ... (rest of the existing logic inside this function remains the same) ...
-        // Set loading, clear error/images, fetch images, handle response/error, set loading false.
-        setIsLoadingPdf(true);
+
+        // Removed the check for tab 0 here - let's always fetch on tab change for simplicity now.
+
+        setIsLoadingPdf(true); // Show loading for tab switch
         setPdfError(null);
-        setImagesForActivePdf([]);
-        console.log("Fetching images for active agreement tab PDF:", activeAgreement.pdfFilename);
+        setImagesForActivePdf([]); // Clear previous tab's images
+        console.log("Fetching images for active tab PDF:", activeAgreement.pdfFilename);
         try {
             const response = await fetchData(`pdf-images/${encodeURIComponent(activeAgreement.pdfFilename)}`);
             if (response && response.image_filenames) {
@@ -467,99 +451,27 @@ function AgreementViewerPage({ user, userTier }) {
         } finally {
             setIsLoadingPdf(false);
         }
-
-    }, [activeTabIndex, agreementData, isIgetcActive]); // Added isIgetcActive
-
-    // --- NEW Effect to fetch IGETC agreement and images ---
-    const fetchIgetcAgreementAndImages = useCallback(async () => {
-        if (!isIgetcActive) return; // Only run if IGETC tab is active
-
-        // Use the first sending institution ID for IGETC
-        const igetcSendingId = allSelectedSendingInstitutions[0]?.id;
-        if (!igetcSendingId || !yearId) {
-            setPdfError("Missing sending institution or year ID for IGETC.");
-            setImagesForActivePdf([]);
-            setIgetcPdfFilename(null);
-            return;
-        }
-
-        // Reset IGETC specific states
-        setIgetcPdfFilename(null);
-        setIgetcImageFilenames([]); // <-- Reset IGETC image state
-        // Also reset active images if IGETC is active
-        if (isIgetcActive) {
-            setImagesForActivePdf([]);
-        }
-
-        setIsLoadingIgetc(true); // Use separate loading state for IGETC fetch
-        setIsLoadingPdf(true); // Also set general PDF loading true
-        setPdfError(null);
-
-        try {
-            // 1. Fetch IGETC PDF filename
-            console.log(`Fetching IGETC agreement for Sending ID: ${igetcSendingId}, Year ID: ${yearId}`);
-            const igetcResponse = await fetchData(`/igetc-agreement?sendingId=${igetcSendingId}&academicYearId=${yearId}`);
-
-            if (!igetcResponse || !igetcResponse.pdfFilename) {
-                throw new Error(igetcResponse?.error || "Failed to get IGETC PDF filename.");
-            }
-            const filename = igetcResponse.pdfFilename;
-            setIgetcPdfFilename(filename);
-            console.log("Received IGETC PDF filename:", filename);
-
-            // 2. Fetch images for the IGETC PDF
-            console.log("Fetching images for IGETC PDF:", filename);
-            const imageResponse = await fetchData(`pdf-images/${encodeURIComponent(filename)}`);
-            if (imageResponse && imageResponse.image_filenames) {
-                console.log("Received images for IGETC tab:", imageResponse.image_filenames);
-                setIgetcImageFilenames(imageResponse.image_filenames); // <-- SET IGETC image state
-                // If IGETC is the currently active tab, also update imagesForActivePdf
-                if (isIgetcActive) {
-                    setImagesForActivePdf(imageResponse.image_filenames);
-                }
-            } else {
-                throw new Error(imageResponse?.error || "No image filenames received for IGETC tab");
-            }
-
-        } catch (err) {
-            console.error("Error fetching IGETC agreement/images:", err);
-            setPdfError(`Failed to load IGETC details: ${err.message}`);
-            setIgetcImageFilenames([]); // <-- Clear on error
-            setIgetcPdfFilename(null);
-            if (isIgetcActive) {
-                setImagesForActivePdf([]); // Clear active images on error if IGETC is active
-            }
-        } finally {
-            setIsLoadingIgetc(false);
-            // Only set general loading false if IGETC is the active view being loaded
-            if (isIgetcActive) {
-                setIsLoadingPdf(false);
-            }
-        }
-    }, [isIgetcActive, allSelectedSendingInstitutions, yearId]); // Dependencies
+    // MODIFIED Dependencies: Only depend on data needed to identify the active agreement
+    }, [activeTabIndex, agreementData]); // Dependencies
 
     // Trigger initial fetch when major changes
     useEffect(() => {
         fetchAgreementDetailsAndImages();
     }, [fetchAgreementDetailsAndImages]);
 
-    // Trigger active image/data fetch when active tab changes OR agreement data loads
+    // Trigger active image fetch when active tab changes
     useEffect(() => {
-        if (isIgetcActive) {
-            // Fetch IGETC data if IGETC tab is active
-            console.log("IGETC tab active, fetching IGETC data...");
-            fetchIgetcAgreementAndImages();
-        } else if (activeTabIndex >= 0 && agreementData.length > 0) {
-            // Fetch agreement images ONLY if an agreement tab is active AND agreementData has been loaded
-            console.log(`Agreement tab ${activeTabIndex} active, fetching images...`);
-            fetchImagesForActiveAgreementTab();
-        } else if (activeTabIndex >= 0 && agreementData.length === 0 && selectedMajorKey) {
-             console.log(`Agreement tab ${activeTabIndex} active, but agreement data not yet loaded. Waiting...`);
+        // Fetch whenever the active tab index changes, but only if agreementData is loaded.
+        // This prevents fetching when agreementData is initially empty.
+        // Also ensures it runs for tab 0 *after* the initial data load completes.
+        if (agreementData.length > 0) {
+             console.log(`Tab changed to ${activeTabIndex} or agreementData loaded, fetching images for active tab.`);
+             fetchImagesForActiveTab();
         } else {
-            console.log("Skipping active tab fetch: Conditions not met (e.g., no major selected for agreement tabs, or initial state before IGETC fetch).");
+             console.log("Skipping fetchImagesForActiveTab because agreementData is empty.");
         }
-    // Ensure all necessary functions and state variables are included
-    }, [activeTabIndex, agreementData, isIgetcActive, selectedMajorKey, fetchIgetcAgreementAndImages, fetchImagesForActiveAgreementTab]); // Keep dependencies
+    // MODIFIED Dependencies: Remove imagesForActivePdf
+    }, [activeTabIndex, agreementData, fetchImagesForActiveTab]);
 
     // --- Handlers ---
     const handleMajorSelect = (majorKey, majorName) => {
@@ -580,11 +492,10 @@ function AgreementViewerPage({ user, userTier }) {
         // The useEffect for fetching majors/depts will re-run due to selectedCategory change
     };
 
-    // MODIFIED Tab Click Handler
     const handleTabClick = (index) => {
         console.log("Tab clicked:", index);
-        setActiveTabIndex(index); // index will be -1 for IGETC
-        // Image/Data fetch will be triggered by the useEffect dependency change on activeTabIndex
+        setActiveTabIndex(index);
+        // Image fetch will be triggered by the useEffect dependency change
     };
 
     // --- Resizing Handlers (remain the same) ---
@@ -682,20 +593,6 @@ function AgreementViewerPage({ user, userTier }) {
     // Adjust height calculation - remove buttonBarHeight
     const mainContentHeight = `calc(90vh - 53px)`; // Assuming nav is 60px
 
-    // Combine all available image filenames for the chat context
-    const allContextImageFilenames = useMemo(() => {
-        // Use a Set to automatically handle duplicates if any filename appears in both lists
-        const combined = new Set([
-            ...allAgreementsImageFilenames, // Images from all major agreements
-            ...igetcImageFilenames       // Images from IGETC agreement
-        ]);
-        return Array.from(combined); // Convert back to an array
-    }, [allAgreementsImageFilenames, igetcImageFilenames]); // Dependencies
-
-    // Determine images for chat context (This might be redundant now, review usage)
-    // const chatContextImages = isIgetcActive ? imagesForActivePdf : allAgreementsImageFilenames; // OLD
-    const chatContextMajorName = isIgetcActive ? "IGETC Requirements" : selectedMajorName;
-
     return (
         <>
             {/* --- Removed Button Bar --- */}
@@ -741,7 +638,7 @@ function AgreementViewerPage({ user, userTier }) {
 
 
                 {/* Left Column (Majors/Depts List) */}
-                {!isIgetcActive && isMajorsVisible && (
+                {isMajorsVisible && (
                     <div style={{
                         flex: `0 0 ${currentMajorsFlexBasis}`,
                         display: 'flex',
@@ -800,124 +697,69 @@ function AgreementViewerPage({ user, userTier }) {
                         {!isLoadingMajors && !isLoadingAvailability && !hasMajorsAvailable && !hasDepartmentsAvailable && ( <p>No majors or departments found for this combination.</p> )}
                     </div>
                 )}
-                 {/* Show Majors Button (only if majors column is hidden AND IGETC is NOT active) */}
-                 {!isMajorsVisible && !isIgetcActive && (
-                    <button
-                        onClick={toggleMajorsVisibility}
-                        style={{
-                            position: 'absolute',
-                            top: '0.5em',
-                            left: '0.5em',
-                            zIndex: 1,
-                            padding: '4px 8px',
-                            fontSize: '0.85em'
-                        }}
-                        className="btn btn-sm btn-outline-secondary"
-                    >
-                        Show Majors
-                    </button>
-                 )}
 
                 {/* Middle Column (Chat Interface) */}
-                <div style={{
-                     flex: `0 0 ${(!isIgetcActive && isMajorsVisible) ? currentChatFlexBasis : (isIgetcActive ? '400px' : `calc(${currentChatFlexBasis} + ${fixedMajorsWidth}px + 1em)`) }`, // Adjust width calculation
-                     display: 'flex',
-                     flexDirection: 'column',
-                     minWidth: `${minColWidth}px`,
-                     marginRight: (!isIgetcActive && isMajorsVisible) ? '0' : '1em' // Add margin if majors are hidden or IGETC active
-                 }}>
+                <div style={{ flex: `0 0 ${currentChatFlexBasis}`, display: 'flex', flexDirection: 'column', minWidth: `${minColWidth}px` }}>
+                    {/* Pass visibility state and toggle function */}
                     <ChatInterface
-                        // Pass the COMBINED list for the payload
-                        allContextImageFilenames={allContextImageFilenames} // <-- NEW PROP
-
-                        // Keep these if needed for the initial prompt logic specifically
-                        imageFilenames={imagesForActivePdf} // Active images for display/context hints?
-                        allAgreementsImageFilenames={allAgreementsImageFilenames} // Major agreement images
-
-                        selectedMajorName={chatContextMajorName} // Pass appropriate name
+                        imageFilenames={allAgreementsImageFilenames} // Pass the combined list
+                        selectedMajorName={selectedMajorName}
                         userName={userName}
-                        isMajorsVisible={!isIgetcActive && isMajorsVisible} // Only relevant if not IGETC
+                        isMajorsVisible={isMajorsVisible}
                         toggleMajorsVisibility={toggleMajorsVisibility}
-                        sendingInstitutionId={contextSendingId} // Pass context-aware ID
+                        sendingInstitutionId={currentSendingId}
                         allSendingInstitutionIds={allSelectedSendingInstitutions.map(inst => inst.id)}
                         receivingInstitutionId={receivingId}
                         academicYearId={yearId}
                         user={user}
-                        // isIgetcMode={isIgetcActive} // Pass flag if needed by ChatInterface display logic
                     />
                 </div>
 
-                {/* Draggable Divider (Conditionally render or adjust margin) */}
-                {!isIgetcActive && isMajorsVisible && (
-                    <div ref={dividerRef} style={{ width: `${dividerWidth}px`, cursor: 'col-resize', backgroundColor: '#e0e0e0', borderLeft: '1px solid #ccc', borderRight: '1px solid #ccc', alignSelf: 'stretch', flexShrink: 0, marginLeft: isMajorsVisible ? '1em' : '0' }} onMouseDown={handleMouseDown} />
-                )}
+                {/* Draggable Divider */}
+                <div ref={dividerRef} style={{ width: `${dividerWidth}px`, cursor: 'col-resize', backgroundColor: '#e0e0e0', borderLeft: '1px solid #ccc', borderRight: '1px solid #ccc', alignSelf: 'stretch', flexShrink: 0, marginLeft: isMajorsVisible ? '1em' : '0' }} onMouseDown={handleMouseDown} />
 
                 {/* Right Column (PDF Viewer) */}
-                <div style={{
-                    flex: '1 1 0',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    minWidth: `${minColWidth}px`,
-                    marginLeft: (!isIgetcActive && isMajorsVisible) ? '1em' : '0' // Adjust margin
-                 }}>
+                <div style={{ flex: '1 1 0', display: 'flex', flexDirection: 'column', minWidth: `${minColWidth}px`, marginLeft: '1em' }}>
                     {/* --- PDF Tabs --- */}
-                    <div style={{ display: 'flex', borderBottom: '1px solid #ccc', flexShrink: 0, background: '#e9ecef' }}>
-                        {/* IGETC Tab */}
-                        <button
-                            key="igetc-tab"
-                            onClick={() => handleTabClick(-1)} // Use -1 index
-                            style={{
-                                // ... (copy styling from agreement tabs) ...
-                                padding: '10px 15px', border: 'none',
-                                borderBottom: isIgetcActive ? '3px solid #0056b3' : '3px solid transparent',
-                                background: isIgetcActive ? '#ffffff' : '#e9ecef',
-                                color: isIgetcActive ? '#0056b3' : '#495057',
-                                cursor: 'pointer', fontWeight: isIgetcActive ? 'bold' : 'normal',
-                                fontSize: '0.95em', textAlign: 'center',
-                                borderTop: !isIgetcActive ? '1px solid #dee2e6' : 'none',
-                                borderLeft: !isIgetcActive ? '1px solid #dee2e6' : 'none',
-                                borderRight: !isIgetcActive ? '1px solid #dee2e6' : 'none',
-                                borderTopLeftRadius: '4px', borderTopRightRadius: '4px',
-                                marginRight: '2px',
-                            }}
-                            title="View IGETC Requirements"
-                        >
-                            IGETC {isLoadingIgetc && <span style={{ marginLeft: '5px', fontStyle: 'italic' }}>(Loading...)</span>}
-                        </button>
-
-                        {/* Agreement Tabs (only if agreements exist) */}
-                        {agreementData.map((agreement, index) => (
-                            <button
-                                key={agreement.sendingId}
-                                onClick={() => handleTabClick(index)}
-                                style={{
-                                    // ... (existing styling) ...
-                                    padding: '10px 15px', border: 'none',
-                                    borderBottom: activeTabIndex === index ? '3px solid #0056b3' : '3px solid transparent',
-                                    background: activeTabIndex === index ? '#ffffff' : '#e9ecef',
-                                    color: activeTabIndex === index ? '#0056b3' : '#495057',
-                                    cursor: 'pointer', fontWeight: activeTabIndex === index ? 'bold' : 'normal',
-                                    fontSize: '0.95em', textAlign: 'center',
-                                    borderTop: activeTabIndex !== index ? '1px solid #dee2e6' : 'none',
-                                    borderLeft: activeTabIndex !== index ? '1px solid #dee2e6' : 'none',
-                                    borderRight: activeTabIndex !== index ? '1px solid #dee2e6' : 'none',
-                                    borderTopLeftRadius: '4px', borderTopRightRadius: '4px',
-                                    marginRight: '2px',
-                                }}
-                                title={`View agreement from ${agreement.sendingName}`}
-                            >
-                                {agreement.sendingName}
-                            </button>
-                        ))}
-                    </div>
+                    {agreementData.length > 1 && (
+                        <div style={{ display: 'flex', borderBottom: '1px solid #ccc', flexShrink: 0, background: '#e9ecef' /* Light grey background for the tab bar */ }}>
+                            {agreementData.map((agreement, index) => (
+                                <button
+                                    key={agreement.sendingId}
+                                    onClick={() => handleTabClick(index)}
+                                    style={{
+                                        padding: '10px 15px',
+                                        border: 'none', // Remove default border
+                                        borderBottom: activeTabIndex === index ? '3px solid #0056b3' : '3px solid transparent', // Stronger blue for active border
+                                        background: activeTabIndex === index ? '#ffffff' : '#e9ecef', // White background for active, match bar background for inactive
+                                        color: activeTabIndex === index ? '#0056b3' : '#495057', // Darker text for inactive, blue for active
+                                        cursor: 'pointer',
+                                        fontWeight: activeTabIndex === index ? 'bold' : 'normal',
+                                        fontSize: '0.95em', // Slightly larger font
+                                        textAlign: 'center',
+                                        // Add subtle top/side borders for inactive tabs for definition
+                                        borderTop: activeTabIndex !== index ? '1px solid #dee2e6' : 'none',
+                                        borderLeft: activeTabIndex !== index ? '1px solid #dee2e6' : 'none',
+                                        borderRight: activeTabIndex !== index ? '1px solid #dee2e6' : 'none',
+                                        borderTopLeftRadius: '4px', // Slightly rounded top corners
+                                        borderTopRightRadius: '4px',
+                                        marginRight: '2px', // Small gap between tabs
+                                    }}
+                                    title={`View agreement from ${agreement.sendingName}`}
+                                >
+                                    {agreement.sendingName}
+                                </button>
+                            ))}
+                        </div>
+                    )}
                     {/* --- End PDF Tabs --- */}
 
-                    {/* PDF Viewer */}
+                    {/* Pass data for the ACTIVE PDF */}
                     <PdfViewer
-                        imageFilenames={imagesForActivePdf}
-                        isLoading={isLoadingPdf} // Use general loading state
-                        error={pdfError}
-                        filename={currentPdfFilename} // Pass the active/IGETC filename
+                        imageFilenames={imagesForActivePdf} // Use state for active PDF's images
+                        isLoading={isLoadingPdf && agreementData[activeTabIndex]?.pdfFilename === currentPdfFilename} // Only show loading for the active tab's fetch
+                        error={pdfError} // Show general PDF error
+                        filename={currentPdfFilename} // Pass the active filename
                     />
                 </div>
             </div>

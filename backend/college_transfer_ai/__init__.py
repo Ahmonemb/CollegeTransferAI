@@ -1,57 +1,59 @@
 import os
 import traceback
-from flask import Flask
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 
 # Import configuration, database setup, and blueprints
 from .config import load_configuration
-from .database import init_db
+from .database import init_db, close_db
 from .routes.stripe_routes import stripe_bp
-from .routes.agreement_routes import agreement_bp, init_gemini # Import init_gemini
+# Remove init_gemini import from agreement_routes
+# from .routes.agreement_routes import agreement_bp, init_gemini # Import init_gemini
+from .routes.agreement_routes import agreement_bp
 from .routes.course_map_routes import course_map_bp
 from .routes.user_routes import user_bp
+# Import the correct init function from llm_service
+from .llm_service import init_llm
 
 def create_app():
     """Flask application factory."""
     app = Flask(__name__)
-
     print("--- Creating Flask App ---")
 
+    config = None # Initialize config variable
     try:
         # Load configuration
         config = load_configuration()
-        app.config['APP_CONFIG'] = config # Store config for access in blueprints
+        app.config['APP_CONFIG'] = config # Store config for access in blueprints if needed
     except Exception as config_err:
         print(f"!!! CRITICAL: Failed to load configuration: {config_err}")
-        traceback.print_exc()
-        # Exit if config is essential and failed to load
-        exit(1)
+        # Decide if the app should exit or continue with defaults/limited functionality
+        # For now, let it continue, but LLM/DB might fail later
+        config = {} # Use an empty config to avoid None errors later
 
-    # Initialize CORS
-    # Be more specific with origins in production
-    cors_origins = config.get("FRONTEND_URL", "*") # Default to '*' if not set
-    CORS(app, resources={r"/*": {"origins": cors_origins}})
-    print(f"--- CORS Initialized (Origins: {cors_origins}) ---")
+    # Initialize CORS (using config)
+    frontend_url = config.get("FRONTEND_URL", "http://localhost:5173") # Default if missing
+    CORS(app, resources={r"/api/*": {"origins": frontend_url}}, supports_credentials=True)
+    print(f"--- CORS Initialized (Origins: {frontend_url}) ---")
 
-    # Initialize Database
+    # Initialize Database (using config)
     try:
-        init_db(config.get('MONGO_URI'))
-    except ConnectionError as db_err:
-        print(f"!!! CRITICAL: Could not connect to database on startup: {db_err}")
-        # Depending on requirements, you might exit or continue with DB unavailable
-        exit(1) # Example: Exit if DB is essential
-    except Exception as general_db_err:
-        print(f"!!! CRITICAL: Unexpected error initializing database: {general_db_err}")
-        traceback.print_exc()
-        exit(1)
+        mongo_uri = config.get("MONGO_URI")
+        if not mongo_uri:
+            raise ValueError("MONGO_URI not found in configuration.")
+        init_db(mongo_uri)
+    except Exception as db_err:
+        print(f"!!! CRITICAL: Failed to initialize Database: {db_err}")
+        # Decide if the app should exit
 
-
-    # Initialize Gemini (if using GOOGLE_API_KEY)
+    # Initialize LLM Service (passing config)
     try:
-        init_gemini(config.get('GOOGLE_API_KEY'))
-    except Exception as gemini_err:
-        print(f"!!! WARNING: Failed to initialize Gemini: {gemini_err}")
-        # App can likely continue without Gemini, just log the warning
+        print("Initializing LLM Service...")
+        init_llm(config) # <-- Pass the loaded config dictionary
+    except Exception as llm_err:
+        print(f"!!! WARNING: Failed to initialize LLM Service: {llm_err}")
+        traceback.print_exc()
+        # App can likely continue without LLM, just log the warning
 
     # Register Blueprints with optional API prefix
     api_prefix = '/api' # Example prefix, adjust as needed or remove if using '/'
@@ -67,4 +69,12 @@ def create_app():
         return "College Transfer AI Backend is running."
 
     print("--- Flask App Creation Complete ---")
+
     return app
+
+if __name__ == '__main__':
+    app = create_app()
+    print("--- Starting Flask Server ---")
+    # Use host/port from config or defaults
+    debug_mode = True # Or get from config/env
+    app.run(host='0.0.0.0', port=5000, debug=debug_mode)

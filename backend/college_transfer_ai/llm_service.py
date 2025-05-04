@@ -1,17 +1,22 @@
-import google.generativeai as genai
 import os
+import traceback
+import requests
+import json
+
+# --- Restore Google Gemini Imports ---
+import google.generativeai as genai
+from google.ai.generativelanguage import FunctionDeclaration, Tool, Part
+from google.protobuf.struct_pb2 import Struct
+# --- Restore Image/GridFS Imports ---
 from PIL import Image
 import io
-import traceback
-import requests # <-- Add requests import
-import json     # <-- Add json import
 from .database import get_gridfs # Import GridFS getter
 
-# --- Tool Definition ---
-from google.ai.generativelanguage import FunctionDeclaration, Tool, Part
-# Import necessary types for function response
-from google.protobuf.struct_pb2 import Struct
+# --- Perplexity API Configuration (for search function) ---
+PERPLEXITY_API_URL = "https://api.perplexity.ai/chat/completions"
+PERPLEXITY_MODEL = "sonar-medium-online" # Use an online model for search
 
+# --- Restore Google Tool Definition ---
 find_prereq_func = FunctionDeclaration(
     name="find_course_prerequisites",
     description="Search the web to find prerequisites for a specific college course at a given institution. Only use if the information is not readily available in the provided documents or general knowledge.",
@@ -24,212 +29,219 @@ find_prereq_func = FunctionDeclaration(
         "required": ["course_code", "institution_name"],
     },
 )
-
 search_tool = Tool(function_declarations=[find_prereq_func])
 # --- End Tool Definition ---
 
-# --- Global Model Variable ---
+# --- Global Gemini Model Variable ---
 gemini_model = None
 
-# --- Safety and Generation Config ---
-# Define safety settings - adjust as needed
+# --- Restore Google Safety and Generation Config ---
 safety_settings = [
     {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
     {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
     {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
     {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
 ]
-
-# Define generation config - adjust as needed
 generation_config = genai.types.GenerationConfig(
-    # candidate_count=1, # Default is 1
-    # stop_sequences=["\n"], # Example stop sequence
-    max_output_tokens=8192, # Maximize output tokens for detailed analysis
-    temperature=0.7, # Adjust creativity/determinism (0.0-1.0)
-    # top_p=0.9, # Nucleus sampling
-    # top_k=40 # Top-k sampling
+    max_output_tokens=8192,
+    temperature=0.7,
 )
+# --- End Google Config ---
 
-# --- Initialization Function ---
-def init_llm():
-    """Initializes the Gemini LLM client and checks for search API keys."""
+# --- Modified Initialization Function (Accepts config) ---
+def init_llm(config): # <-- Accept config dictionary
+    """Initializes the Gemini LLM client using provided configuration."""
+    print("--- Initializing LLM Service ---")
     global gemini_model
-    if (gemini_model is None):
+    if gemini_model is None:
         try:
-            google_api_key = os.getenv("GOOGLE_API_KEY")
-            google_search_api_key = os.getenv("GOOGLE_SEARCH_API_KEY") # Check search key
-            google_search_engine_id = os.getenv("GOOGLE_SEARCH_ENGINE_ID") # Check search engine ID
+            # Get keys from the config dictionary
+            google_api_key = config.get('GOOGLE_API_KEY')
+            perplexity_api_key = config.get('PERPLEXITY_API_KEY') # Check Perplexity key too
+
+            # More informative print:
+            print(f"LLM Service Check: GOOGLE_API_KEY is {'SET' if google_api_key else 'NOT SET'} (from config)", google_api_key)
 
             if not google_api_key:
-                raise ValueError("GOOGLE_API_KEY environment variable not set.")
-            # Add warnings if search keys are missing, as search function will fail
-            if not google_search_api_key:
-                print("Warning: GOOGLE_SEARCH_API_KEY environment variable not set. Web search function will fail.")
-            if not google_search_engine_id:
-                print("Warning: GOOGLE_SEARCH_ENGINE_ID environment variable not set. Web search function will fail.")
+                print("Warning: GOOGLE_API_KEY not found in config. Gemini API will not function.")
+                gemini_model = None
+                # Optionally raise an error if Gemini is critical
+                # raise ValueError("GOOGLE_API_KEY missing in configuration.")
+            else:
+                print("LLM Service: Configuring Gemini with API key (from config)...")
+                genai.configure(api_key=google_api_key)
+                # Initialize the Gemini model with the tool
+                gemini_model = genai.GenerativeModel(
+                    'gemini-1.5-flash-latest', # Or your preferred Gemini model
+                    tools=[search_tool]
+                )
+                print("Gemini LLM initialized successfully with search tool.")
 
-            genai.configure(api_key=google_api_key)
-            # Initialize the model with the tool
-            gemini_model = genai.GenerativeModel(
-                'gemini-1.5-pro-preview',
-                tools=[search_tool] # Pass the tool definition
-            )
-            print("Gemini LLM initialized successfully with search tool.")
+            # Check and report Perplexity key status
+            if perplexity_api_key:
+                 print("Perplexity API key found in config for search function.")
+            else:
+                print("Warning: PERPLEXITY_API_KEY not found in config. Web search function will fail.")
+
         except Exception as e:
-            print(f"Error initializing Gemini LLM: {e}")
+            print(f"Error initializing LLM services: {e}")
             traceback.print_exc()
             gemini_model = None # Ensure it's None on failure
 
-# --- Real Web Search Function ---
-def perform_web_search(course_code, institution_name):
+# --- Web Search Function (Uses os.getenv - Consider passing config here too) ---
+def perform_web_search(course_code, institution_name, config): # <-- Pass config
     """
-    Performs a web search using Google Custom Search API to find prerequisites.
+    Uses Perplexity API to search for prerequisites and returns its response content.
     """
-    print(f"--- Performing REAL WEB SEARCH for '{course_code}' at '{institution_name}' ---")
-    api_key = os.getenv("GOOGLE_SEARCH_API_KEY")
-    search_engine_id = os.getenv("GOOGLE_SEARCH_ENGINE_ID")
+    print(f"--- Performing WEB SEARCH via Perplexity for '{course_code}' at '{institution_name}' ---")
+    perplexity_api_key = config.get("PERPLEXITY_API_KEY") # <-- Get from config
+    if not perplexity_api_key:
+        print("Error: PERPLEXITY_API_KEY not set in config. Cannot perform Perplexity search.")
+        return "Search could not be performed due to missing Perplexity configuration."
 
-    if not api_key or not search_engine_id:
-        print("Error: Google Search API Key or Search Engine ID not configured.")
-        return "Search could not be performed due to missing configuration."
+    # Simple prompt for Perplexity
+    search_prompt = f"What are the prerequisites for the course '{course_code}' at '{institution_name}'? Provide details from official sources if possible."
 
-    # Construct search query
-    query = f'"{institution_name}" "{course_code}" prerequisites OR requirements'
-    print(f"  Search Query: {query}")
-
-    # Google Custom Search API endpoint
-    url = f"https://www.googleapis.com/customsearch/v1"
-    params = {
-        'key': api_key,
-        'cx': search_engine_id,
-        'q': query,
-        'num': 3 # Request top 3 results
+    headers = {
+        "Authorization": f"Bearer {perplexity_api_key}",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+    payload = {
+        "model": PERPLEXITY_MODEL,
+        "messages": [
+            {"role": "system", "content": "You are an AI assistant helping find course prerequisites."},
+            {"role": "user", "content": search_prompt}
+        ],
+        "temperature": 0.3, # Lower temperature for more factual search results
+        "max_tokens": 500, # Limit response length from Perplexity
     }
 
     try:
-        response = requests.get(url, params=params, timeout=10) # Add timeout
-        response.raise_for_status() # Raise HTTPError for bad responses (4xx or 5xx)
+        response = requests.post(
+            PERPLEXITY_API_URL,
+            headers=headers,
+            json=payload,
+            timeout=60 # Timeout for Perplexity search
+        )
+        response.raise_for_status()
+        result = response.json()
 
-        search_results = response.json()
-
-        # Extract relevant snippets
-        snippets = []
-        if 'items' in search_results and search_results['items']:
-            for item in search_results['items']:
-                title = item.get('title', 'No Title')
-                snippet = item.get('snippet', 'No Snippet').replace('\n', ' ') # Clean snippet
-                link = item.get('link', '#')
-                snippets.append(f"Title: {title}\nSnippet: {snippet}\nLink: {link}")
-
-            if snippets:
-                print(f"  Found {len(snippets)} relevant results.")
-                # Combine snippets into a single string for the LLM
-                return "Web search results:\n\n" + "\n---\n".join(snippets)
-            else:
-                print("  No relevant items found in search results.")
-                return f"Web search did not find specific prerequisite information for '{course_code}' at '{institution_name}'."
+        if result.get("choices") and result["choices"][0].get("message"):
+            content = result["choices"][0]["message"].get("content")
+            print(f"  Perplexity search successful. Result snippet: {content[:100]}...")
+            return content.strip() if content else "Perplexity returned an empty response."
         else:
-            print("  No items found in search results.")
-            return f"Web search returned no results for prerequisites of '{course_code}' at '{institution_name}'."
+            print(f"  Warning: Unexpected response format from Perplexity search: {result}")
+            return "Perplexity search returned an unexpected format."
 
+    except requests.exceptions.Timeout:
+        print("  Error: Request to Perplexity API timed out during search.")
+        return "Perplexity search timed out."
     except requests.exceptions.RequestException as e:
-        print(f"Error during Google Search API request: {e}")
-        return f"Web search failed due to a network or API error: {e}"
-    except json.JSONDecodeError as e:
-         print(f"Error decoding Google Search API response: {e}")
-         return "Web search failed due to invalid API response format."
+        print(f"  Error during Perplexity API search request: {e}")
+        return f"Perplexity search failed: {e}"
     except Exception as e:
-        print(f"An unexpected error occurred during web search: {e}")
-        traceback.print_exc()
-        return "An unexpected error occurred during web search."
-    # --- End Real Web Search ---
+        print(f"  An unexpected error occurred during Perplexity search: {e}")
+        return "An unexpected error occurred during Perplexity search."
+# --- End Web Search Function ---
 
 
-# --- Chat Response Generation (Modified for Tool Use) ---
-def generate_chat_response(prompt, history, image_filenames=None):
+# --- Chat Response Generation (Using Gemini with Function Calling AND Image Support) ---
+def generate_chat_response(prompt, history, image_filenames=None, config=None): # <-- Accept config
     """
-    Generates a chat response using the Gemini LLM, handling potential function calls for web search.
+    Generates a chat response using the Gemini LLM, handling images and
+    potential function calls to perform web search via Perplexity.
+    Requires config if web search might be needed.
     """
     global gemini_model
-    if (gemini_model is None):
-        init_llm()
-        if (gemini_model is None):
+    if gemini_model is None:
+        if not config:
+             print("Error: LLM not initialized and no config provided to initialize it.")
+             return "[LLM Service Error: Not Initialized]"
+        init_llm(config) # Try to initialize if config is provided
+        if gemini_model is None:
             print("LLM initialization failed. Cannot generate response.")
-            return None
+            return "[LLM Service Error: Initialization Failed]"
 
-    fs = None
+    fs = None # Initialize fs
     try:
         # --- Construct Content List (Images + Prompt) ---
         content_parts = []
         if image_filenames:
-            print(f"Processing {len(image_filenames)} image(s) for LLM...")
-            fs = get_gridfs()
+            print(f"Processing {len(image_filenames)} image(s) for Gemini...")
+            fs = get_gridfs() # Get GridFS instance
             if not fs:
-                print("Error: Could not get GridFS instance.")
-                return None
-            for filename in image_filenames:
-                try:
-                    grid_out = fs.find_one({"filename": filename})
-                    if grid_out:
-                        image_bytes = grid_out.read()
-                        img = Image.open(io.BytesIO(image_bytes))
-                        if img.format in ["PNG", "JPEG", "WEBP"]:
+                print("Error: Could not get GridFS instance for image processing.")
+                # Decide how to proceed: return error or continue without images?
+                # Let's continue without images for now, but log the error.
+            else:
+                for filename in image_filenames:
+                    try:
+                        grid_out = fs.find_one({"filename": filename})
+                        if grid_out:
+                            image_bytes = grid_out.read()
+                            # Verify image format if necessary, Gemini supports PNG, JPEG, WEBP, HEIC, HEIF
+                            img = Image.open(io.BytesIO(image_bytes))
+                            # Append the PIL Image object directly
                             content_parts.append(img)
-                            # print(f"Added image '{filename}' to LLM content.") # Less verbose
+                            print(f"  Added image '{filename}' to content parts.")
                         else:
-                            print(f"Warning: Skipping image '{filename}' due to unsupported format: {img.format}")
-                    else:
-                        print(f"Warning: Image '{filename}' not found in GridFS.")
-                except Exception as img_err:
-                    print(f"Error processing image '{filename}': {img_err}")
-        content_parts.append(prompt)
-        # print("Added text prompt to LLM content.") # Less verbose
+                            print(f"Warning: Image '{filename}' not found in GridFS.")
+                    except Exception as img_err:
+                        print(f"Error processing image '{filename}': {img_err}")
+                        # Continue processing other images/prompt
 
-        # --- Format History ---
+        # Always add the text prompt
+        content_parts.append(prompt)
+        print("Added text prompt to LLM content.")
+        # --- End Content List Construction ---
+
+
+        # --- Format History (for Gemini) ---
         formatted_history = []
         for msg in history:
             role = 'model' if msg.get('role') in ['bot', 'assistant'] else 'user'
-            text_content = msg.get('content', '')
-            # Handle potential previous function calls/responses in history if needed
-            # For simplicity, assuming history only contains user/model text for now
-            formatted_history.append({'role': role, 'parts': [text_content]})
+            # Ensure history parts are correctly formatted if function calls were involved previously
+            # Assuming simple text history for now
+            formatted_history.append({'role': role, 'parts': [msg.get('content', '')]})
 
         # --- Start Chat and Send Message ---
-        print("Starting LLM chat session...")
+        print("Starting Gemini LLM chat session...")
         chat = gemini_model.start_chat(history=formatted_history)
 
-        print("Sending message to LLM (potential function call)...")
+        print("Sending message to Gemini (potential function call)...")
         response = chat.send_message(
-            content_parts,
+            content_parts, # Pass the list containing images and text
             generation_config=generation_config,
             safety_settings=safety_settings,
             stream=False
         )
 
-        # --- Handle Function Call ---
-        # Check if the response contains a function call request
+        # --- Handle Function Call (if requested by Gemini) ---
         if response.candidates and response.candidates[0].content.parts:
             first_part = response.candidates[0].content.parts[0]
             if hasattr(first_part, 'function_call') and first_part.function_call:
                 function_call = first_part.function_call
-                print(f"LLM requested function call: {function_call.name}")
+                print(f"Gemini requested function call: {function_call.name}")
 
                 if function_call.name == "find_course_prerequisites":
-                    # Extract arguments
                     args = function_call.args
                     course = args.get('course_code')
                     institution = args.get('institution_name')
                     print(f"  Arguments: course='{course}', institution='{institution}'")
 
                     if course and institution:
-                        # Execute the REAL search
-                        search_result_text = perform_web_search(course, institution) # Calls the new function
-                        print(f"  Web search result snippet: {search_result_text[:200]}...") # Log snippet
+                        if not config:
+                             print("Error: Config needed for web search but not provided.")
+                             search_result_text = "Web search failed: Configuration missing."
+                        else:
+                             # Execute the search using Perplexity via our function
+                             search_result_text = perform_web_search(course, institution, config) # <-- Pass config
 
-                        # --- Send Function Response back to LLM ---
-                        # Create the Struct for the function response content
+                        # --- Send Function Response back to Gemini ---
                         response_data = Struct()
-                        response_data.update({"result": search_result_text})
+                        response_data.update({"result": search_result_text}) # Send Perplexity's response text
 
                         function_response = Part(
                             function_response={
@@ -238,7 +250,7 @@ def generate_chat_response(prompt, history, image_filenames=None):
                             }
                         )
 
-                        print("Sending function response back to LLM...")
+                        print("Sending function response (from Perplexity search) back to Gemini...")
                         # Send the function response to continue the conversation
                         response = chat.send_message(
                             function_response,
@@ -247,20 +259,18 @@ def generate_chat_response(prompt, history, image_filenames=None):
                         # The final response should now be in this new 'response' object
                     else:
                         print("Error: Missing arguments for function call.")
-                        # Handle error - maybe send back an error message to LLM?
-                        # For now, just proceed without calling function
-                        pass # Fall through to process the (likely incomplete) response
+                        # Handle error - maybe send back an error message to Gemini?
+                        pass # Fall through
                 else:
                     print(f"Warning: Received unhandled function call request: {function_call.name}")
-                    # Handle other function calls if defined, or ignore
 
-        # --- Process Final Response (after potential function call) ---
-        print("Processing final LLM response.")
+        # --- Process Final Gemini Response ---
+        print("Processing final Gemini response.")
         if response.parts:
             return response.text
         else:
-            # Handle blocks or empty responses as before
-            print("Warning: Final LLM response was empty or blocked.")
+            # Handle blocks or empty responses
+            print("Warning: Final Gemini response was empty or blocked.")
             print(f"Prompt Feedback: {response.prompt_feedback}")
             if response.candidates and response.candidates[0].finish_reason:
                 print(f"Finish Reason: {response.candidates[0].finish_reason}")
@@ -268,12 +278,13 @@ def generate_chat_response(prompt, history, image_filenames=None):
             block_reason = "Unknown"
             if response.prompt_feedback and response.prompt_feedback.block_reason:
                 block_reason = response.prompt_feedback.block_reason.name
-            return f"[LLM response blocked due to: {block_reason}]"
+            return f"[LLM response blocked due to: {block_reason}]" # Gemini block reason
 
     except Exception as e:
-        print(f"LLM generation error: {e}")
+        print(f"LLM generation error (Gemini): {e}")
         traceback.print_exc()
-        return None
+        return None # Or an error message string
     finally:
-        pass # GridFS connection managed elsewhere
+        # GridFS connection is managed by the getter, no explicit close needed here
+        pass
 

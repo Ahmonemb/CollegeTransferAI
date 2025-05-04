@@ -51,3 +51,16 @@ def get_course_maps_collection():
      if course_maps_collection is None:
          raise Exception("Course maps collection not initialized.")
      return course_maps_collection
+
+def get_agreement_summaries_collection(): # Add getter for summaries
+    if agreement_summaries_collection is None:
+        raise Exception("Agreement summaries collection not initialized.")
+    return agreement_summaries_collection
+
+def close_db(exception=None):
+    """Closes the MongoDB connection."""
+    global mongo_client
+    if mongo_client:
+        print("--- Closing MongoDB Connection ---")
+        mongo_client.close()
+        mongo_client = None # Optional: Reset global variable
