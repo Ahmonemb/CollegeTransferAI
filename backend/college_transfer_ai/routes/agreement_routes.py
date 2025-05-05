@@ -3,7 +3,7 @@ import base64
 import io
 import fitz # PyMuPDF
 from PIL import Image
-from flask import Blueprint, jsonify, request, Response, current_app
+from flask import Blueprint, jsonify, request, Response, current_app, send_file, make_response
 from bson.objectid import ObjectId
 # Remove OpenAI import if not used
 # from openai import OpenAI
@@ -19,7 +19,7 @@ from google.generativeai.types import HarmCategory, HarmBlockThreshold
 # --- End Google AI Imports ---
 
 FREE_TIER_LIMIT = 10
-PREMIUM_TIER_LIMIT = 200 # Example limit for paid users
+PREMIUM_TIER_LIMIT = 50 # Example limit for paid users
 
 agreement_bp = Blueprint('agreement_bp', __name__)
 
@@ -34,7 +34,7 @@ def init_gemini(api_key):
     try:
         genai.configure(api_key=api_key)
         # Consider making model name configurable
-        gemini_model = genai.GenerativeModel('gemini-1.5-pro')
+        gemini_model = genai.GenerativeModel('gemini-2.5-flash-preview-04-17')
         print("--- Gemini Initialized Successfully ---")
     except Exception as e:
         print(f"!!! Gemini Initialization Error: {e}")
@@ -254,21 +254,39 @@ def get_pdf_images(filename):
 
 @agreement_bp.route('/image/<path:filename>', methods=['GET'])
 def get_image(filename):
-    """Serves an image file directly from GridFS."""
+    """Serves an image file directly from GridFS with cache headers."""
     fs = get_gridfs() # Get GridFS instance
+    grid_out = None
     try:
         grid_out = fs.find_one({"filename": filename})
         if not grid_out:
             return jsonify({"error": "Image not found"}), 404
 
-        response = Response(grid_out.read(), mimetype=grid_out.contentType)
-        # Optional: Add cache headers
-        # response.headers['Cache-Control'] = 'public, max-age=3600' # Cache for 1 hour
+        # Create a file-like object from the GridFS data
+        image_data_stream = io.BytesIO(grid_out.read())
+
+        # Create a response object using send_file
+        response = make_response(send_file(
+            image_data_stream,
+            mimetype=grid_out.contentType or 'image/png', # Use stored content type or default
+            as_attachment=False, # Serve inline
+            download_name=grid_out.filename # Optional: helps browser name if saved
+        ))
+
+        # --- Add Cache-Control Header ---
+        response.headers['Cache-Control'] = 'public, max-age=8640000'
+
         return response
+
     except Exception as e:
         print(f"Error serving image {filename}: {e}")
         traceback.print_exc()
+        # Note: grid_out.read() reads the whole file, no explicit close needed here
         return jsonify({"error": "Failed to serve image"}), 500
+    # finally: # GridFS find_one().read() doesn't require explicit closing like open_download_stream
+        # if grid_out and hasattr(grid_out, 'close'): # Check if grid_out is a file-like object that needs closing
+        #     grid_out.close() # This block is likely not needed with find_one().read()
+
 
 # --- Chat Endpoint ---
 @agreement_bp.route('/chat', methods=['POST'])
@@ -392,3 +410,55 @@ def chat_endpoint():
         traceback.print_exc()
         # Provide a more generic error to the user
         return jsonify({"error": "Failed to get response from AI assistant."}), 500
+    
+# --- NEW: IGETC Agreement Endpoint ---
+@agreement_bp.route('/igetc-agreement', methods=['GET'])
+def get_igetc_agreement():
+    # --- Optional: Add Authentication/Authorization ---
+    config = current_app.config['APP_CONFIG']
+    GOOGLE_CLIENT_ID = config.get('GOOGLE_CLIENT_ID')
+    if not GOOGLE_CLIENT_ID:
+         return jsonify({"error": "Google Client ID not configured."}), 500
+
+    try:
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({"error": "Authorization token missing or invalid"}), 401
+        token = auth_header.split(' ')[1]
+        user_info = verify_google_token(token, GOOGLE_CLIENT_ID)
+        # You might not need get_or_create_user here if just checking validity
+        if not user_info:
+             raise ValueError("Invalid token or user not found.")
+    except ValueError as auth_err:
+        return jsonify({"error": str(auth_err)}), 401
+    except Exception as e:
+        print(f"Error during IGETC auth check: {e}")
+        traceback.print_exc()
+        return jsonify({"error": "Authentication failed."}), 500
+    # --- End Optional Auth ---
+
+    sending_institution_id = request.args.get('sendingId')
+    academic_year_id = request.args.get('academicYearId')
+
+    if not sending_institution_id or not academic_year_id:
+        return jsonify({"error": "Missing sendingId or academicYearId parameter"}), 400
+
+    try:
+        # Assuming api is your CollegeTransferAPI instance
+        pdf_filename = api.get_igetc_courses(int(academic_year_id), int(sending_institution_id))
+
+        if pdf_filename:
+            return jsonify({"pdfFilename": pdf_filename}), 200
+        else:
+            # Distinguish between "not found" and an error during fetch/save
+            # The get_igetc_courses function should ideally return None if not found
+            # and raise an exception for other errors, but we'll handle None here.
+            return jsonify({"error": "IGETC agreement PDF not found or could not be generated."}), 404
+
+    except ValueError:
+         return jsonify({"error": "Invalid ID format. IDs must be integers."}), 400
+    except Exception as e:
+        print(f"Error fetching IGETC agreement for {sending_institution_id} / {academic_year_id}: {e}")
+        traceback.print_exc()
+        return jsonify({"error": "Failed to fetch IGETC agreement"}), 500
+# --- End IGETC Endpoint ---

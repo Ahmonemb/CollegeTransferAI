@@ -8,7 +8,6 @@ function PdfViewer({ imageFilenames, isLoading, error, filename }) { // Added is
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       {/* Show messages passed from parent */}
       {!filename && <p style={{ textAlign: 'center', marginTop: '2em' }}>Select a major/department to view the agreement.</p>}
-      {isLoading && <p>Loading agreement images...</p>}
       {error && <p style={{ color: 'red' }}>Error loading agreement: {error}</p>}
 
       {!isLoading && !error && filename && (!imageFilenames || imageFilenames.length === 0) && (

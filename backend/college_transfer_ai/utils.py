@@ -107,8 +107,7 @@ def check_and_update_usage(user_data):
     """
     Checks if the user is within their usage limit based on tier.
     Resets daily usage if necessary. Increments usage count if within limit.
-    Returns tuple (bool, str): (True, success_message) if usage is allowed, 
-    (False, error_message) otherwise.
+    Returns True if usage is allowed, False otherwise.
     Raises Exception on database error.
     """
     users_collection = get_users_collection() # Get collection via function
@@ -143,7 +142,7 @@ def check_and_update_usage(user_data):
     # --- Check if limit is exceeded ---
     if requests_used >= limit:
         print(f"Usage limit exceeded for user {google_user_id} (Tier: {tier}, Used: {requests_used}, Limit: {limit})")
-        return False, f"Usage limit reached: {requests_used}/{limit} requests. Upgrade your plan for more requests or wait for the next reset period."
+        return False # Limit exceeded
 
     # --- If limit is not exceeded, increment count ---
     try:
@@ -176,70 +175,9 @@ def check_and_update_usage(user_data):
              raise Exception(f"User {google_user_id} not found during usage update.")
 
         print(f"Usage updated for user {google_user_id}: {requests_used + 1}/{limit}")
-        return True, f"Request allowed. Usage: {requests_used + 1}/{limit}."
+        return True # Usage allowed and updated
     except Exception as e:
         print(f"Error updating usage count for user {google_user_id}: {e}")
         # Add traceback here if it's not already in the calling function's handler
         traceback.print_exc()
         raise Exception(f"Failed to update usage count: {e}")
-
-# Example structure for utils.py
-
-import os
-from functools import wraps
-from flask import request, jsonify, current_app # Assuming Flask context
-# Import Google auth libraries
-from google.oauth2 import id_token
-from google.auth.transport import requests as google_requests
-
-GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID") # Ensure this is loaded correctly
-
-def verify_google_token(f):
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        token = None
-        # Extract Bearer token from Authorization header
-        auth_header = request.headers.get('Authorization')
-        if (auth_header):
-            parts = auth_header.split()
-            if len(parts) == 2 and parts[0].lower() == 'bearer':
-                token = parts[1]
-
-        if not token:
-            print("Decorator Error: Authorization token is missing")
-            return jsonify({"error": "Authorization token is missing"}), 401
-
-        if not GOOGLE_CLIENT_ID:
-             print("Decorator Error: GOOGLE_CLIENT_ID is not set in environment variables.")
-             return jsonify({"error": "Server configuration error: Google Client ID not set."}), 500
-
-        try:
-            # Verify the token and get user info
-            idinfo = id_token.verify_oauth2_token(
-                token, google_requests.Request(), GOOGLE_CLIENT_ID
-            )
-
-            # --- Verification Point ---
-            # Ensure 'sub' is present after successful verification
-            if 'sub' not in idinfo:
-                 print(f"Decorator Error: 'sub' key not found in verified token payload: {idinfo}")
-                 return jsonify({"error": "Token verified, but user identifier ('sub') is missing."}), 401
-
-            # --- Crucial Step ---
-            # Pass the complete idinfo dictionary to the decorated route function
-            return f(idinfo, *args, **kwargs)
-
-        except ValueError as e:
-            # Handles common token validation errors (expired, audience, etc.)
-            print(f"Decorator Error: Invalid token - {e}")
-            # It's helpful to return the specific error detail from Google's library
-            return jsonify({"error": "Invalid or expired token", "details": str(e)}), 401
-        except Exception as e:
-            # Catch unexpected errors during verification
-            print(f"Decorator Error: Unexpected error during token verification - {e}")
-            traceback.print_exc() # Log the full traceback
-            return jsonify({"error": "Token verification failed", "details": str(e)}), 500
-
-    return decorated_function
-
-# ... other utility functions ...

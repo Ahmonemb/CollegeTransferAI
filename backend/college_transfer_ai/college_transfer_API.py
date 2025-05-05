@@ -317,11 +317,11 @@ class CollegeTransferAPI:
             client = get_mongo_client() # Get client connection
             db = client["CollegeTransferAICluster"] # Use correct DB name if needed
             fs = gridfs.GridFS(db)
-            if fs.find_one({"filename": filename}):
-                print(f"PDF '{filename}' already exists in GridFS. Skipping download.")
-                # --- Removed context processing call ---
-                client.close()
-                return filename # Return existing filename if found
+            # if fs.find_one({"filename": filename}):
+            #     print(f"PDF '{filename}' already exists in GridFS. Skipping download.")
+            #     # --- Removed context processing call ---
+            #     client.close()
+            #     return filename # Return existing filename if found
 
             # --- Construct URL (same as before) ---
             viewBy = "major"
@@ -363,9 +363,17 @@ class CollegeTransferAPI:
                     browser = p.chromium.launch(headless=True)
                     page = browser.new_page()
                     page.goto(url, wait_until="networkidle", timeout=60000)
-                    page.wait_for_timeout(2000)
+                     # --- Wait for the specific header element instead of fixed timeout ---
+                    header_selector = '#view-results > app-report-preview > div.resultsBox > awc-agreement > div > div > awc-agreement-row:nth-child(1) > div > div.rowContent > div > div.rowReceiving > awc-articulation-receiving > div > div > awc-articulation-node > div > awc-articulation-node-receiving-course > awc-course > div > div.courseTitle'
+                    print(f"Waiting for selector '{header_selector}' indicating page load...")
+                    page.wait_for_selector(header_selector, timeout=30000) # Wait up to 30 seconds
+                    print("Selector found. Proceeding with PDF generation.")
+                    
                     pdf_bytes = page.pdf(format="A4")
                     print(f"Successfully downloaded PDF bytes (size: {len(pdf_bytes)} bytes)")
+                    
+                    # with open(filename, "wb") as f:
+                        # f.write(pdf_bytes)
                 except Exception as playwright_err:
                      print(f"Playwright error fetching PDF from {url}: {playwright_err}")
                      if browser: browser.close()

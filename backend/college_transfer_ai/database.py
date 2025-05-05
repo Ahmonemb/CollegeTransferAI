@@ -6,11 +6,10 @@ db = None
 fs = None
 users_collection = None
 course_maps_collection = None
-agreement_summaries_collection = None # Add collection for summaries
 
 def init_db(mongo_uri):
     """Initializes MongoDB connection, database, GridFS, and collections."""
-    global mongo_client, db, fs, users_collection, course_maps_collection, agreement_summaries_collection # Add global
+    global mongo_client, db, fs, users_collection, course_maps_collection
     if not mongo_uri:
         raise ConnectionError("MongoDB URI not provided in configuration.")
     try:
@@ -23,7 +22,6 @@ def init_db(mongo_uri):
         fs = gridfs.GridFS(db)
         users_collection = db.users
         course_maps_collection = db.course_maps
-        agreement_summaries_collection = db.agreement_summaries # Initialize collection
         # Test connection
         mongo_client.admin.command('ping')
         print(f"--- MongoDB Connected Successfully (DB: {db_name}) ---")
@@ -51,16 +49,3 @@ def get_course_maps_collection():
      if course_maps_collection is None:
          raise Exception("Course maps collection not initialized.")
      return course_maps_collection
-
-def get_agreement_summaries_collection(): # Add getter for summaries
-    if agreement_summaries_collection is None:
-        raise Exception("Agreement summaries collection not initialized.")
-    return agreement_summaries_collection
-
-def close_db(exception=None):
-    """Closes the MongoDB connection."""
-    global mongo_client
-    if mongo_client:
-        print("--- Closing MongoDB Connection ---")
-        mongo_client.close()
-        mongo_client = None # Optional: Reset global variable
