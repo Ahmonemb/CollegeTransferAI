@@ -1,15 +1,16 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react'; // Add useRef
 import { useNavigate } from 'react-router-dom';
 import { fetchData } from '../services/api';
 import '../App.css';
+import { useReceivingInstitutions } from '../hooks/useReceivingInstitutions';
+import { useAcademicYears } from '../hooks/useAcademicYears';
 
 const CollegeTransferForm = () => {
     const navigate = useNavigate();
 
     // --- State for fetched data ---
     const [institutions, setInstitutions] = useState({}); // All institutions (for sending dropdown)
-    const [availableReceivingInstitutions, setAvailableReceivingInstitutions] = useState({}); // NEW: Institutions available for the selected sender(s)
-    const [academicYears, setAcademicYears] = useState({});
+    // const [academicYears, setAcademicYears] = useState({});
 
     // --- State for input values and selections ---
     const [sendingInputValue, setSendingInputValue] = useState('');
@@ -33,8 +34,15 @@ const CollegeTransferForm = () => {
     // --- State for loading and results ---
     const [isLoading] = useState(false); // Consider separate loading states if needed
     const [error, setError] = useState(null);
-    const [isLoadingReceiving, setIsLoadingReceiving] = useState(false);
-    const [isLoadingYears, setIsLoadingYears] = useState(false); // New state for loading years
+
+    // --- Cache Ref for Institutions ---
+    const institutionsCacheRef = useRef(null); // In-memory cache
+
+    const { availableReceivingInstitutions, isLoading: isLoadingReceiving, error: receivingError } = useReceivingInstitutions(selectedSendingInstitutions);
+    const { academicYears, isLoading: isLoadingYears, error: yearsError } = useAcademicYears(selectedSendingInstitutions, selectedReceivingId);
+
+    // Combine errors if needed, or handle separately
+    const combinedError = receivingError || yearsError || error; // 'error' is the form's general error state
 
     // --- Helper Functions (resetForm - adjust state clearing) ---
     // const resetForm = useCallback(() => {
@@ -56,352 +64,161 @@ const CollegeTransferForm = () => {
 
     // --- Effects for Initial Data Loading (Institutions, Years) ---
     useEffect(() => {
-        const cacheInstitutionsKey = "instutions"
-        let cachedInstitutions = null
+        const cacheInstitutionsKey = "allInstitutions"; // More specific key
+        let cachedInstitutions = null;
 
+        // --- 1. Check In-Memory Cache ---
+        if (institutionsCacheRef.current) {
+            console.log("Loaded institutions from in-memory cache.");
+            setInstitutions(institutionsCacheRef.current);
+            setError(null);
+            return;
+        }
+
+        // --- 2. Check localStorage ---
         try {
             const cachedData = localStorage.getItem(cacheInstitutionsKey);
             if (cachedData) {
                 cachedInstitutions = JSON.parse(cachedData);
-                console.log("Loaded institutions from cache:", cacheInstitutionsKey);
+                console.log("Loaded institutions from localStorage:", cacheInstitutionsKey);
                 setInstitutions(cachedInstitutions);
+                institutionsCacheRef.current = cachedInstitutions; // Update in-memory cache
                 setError(null);
                 return;
             }
         } catch (e) {
-            console.error("Error loading institutions from cache:", e);
+            console.error("Error loading institutions from localStorage:", e);
             localStorage.removeItem(cacheInstitutionsKey); // Clear cache on error
         }
 
-        
-        fetchData('institutions')
+        // --- 3. Fetch from API ---
+        console.log("Cache miss for institutions. Fetching...");
+        fetchData('/institutions') // Ensure endpoint is correct
             .then(data => {
-                setInstitutions(data)
-                try {
-                    localStorage.setItem(cacheInstitutionsKey, JSON.stringify(data));
-                    console.log("Institutions cached successfully:", cacheInstitutionsKey);
-                } catch (e) {
-                    console.error("Error caching institutions:", e);
+                if (data && Object.keys(data).length > 0) {
+                    setInstitutions(data);
+                    institutionsCacheRef.current = data; // Store in in-memory cache
+                    // --- Cache Result in localStorage ---
+                    try {
+                        localStorage.setItem(cacheInstitutionsKey, JSON.stringify(data));
+                        console.log("Institutions cached successfully:", cacheInstitutionsKey);
+                    } catch (e) {
+                        console.error("Error caching institutions:", e);
+                    }
+                } else {
+                    setInstitutions({});
+                    setError("No institutions found from API.");
                 }
             })
             .catch(err => setError(`Failed to load institutions: ${err.message}`));
-        
-    }, []);
 
-    useEffect(() => {
-        // Only proceed if we have at least one sending institution AND a receiving institution selected
-        if (selectedSendingInstitutions.length > 0 && selectedReceivingId) {
-            const firstSendingId = selectedSendingInstitutions[0].id; // Use the first selected sender for the API call
-            const cacheAcademicYearsKey = `academic-years-${firstSendingId}-${selectedReceivingId}`;
-            let cachedAcademicYears = null;
+    }, []); // Runs only once on mount
 
-            console.log(`Attempting to load/fetch academic years for S=${firstSendingId}, R=${selectedReceivingId}`);
+    // // --- MODIFIED Effect for Fetching Receiving Institutions based on ALL Senders ---
+    // useEffect(() => {
+    //     // Clear previous receiving selections and data whenever sending institutions change
+    //     setReceivingInputValue('');
+    //     setSelectedReceivingId(null);
+    //     // ALSO CLEAR YEAR SELECTION when sending institutions change
+    //     setYearInputValue('');
+    //     setSelectedYearId(null);
+    //     setFilteredReceiving([]);
+    //     setError(null); // Clear previous errors
 
-            // --- Check Cache ---
-            try {
-                const cachedData = localStorage.getItem(cacheAcademicYearsKey);
-                if (cachedData) {
-                    cachedAcademicYears = JSON.parse(cachedData);
-                    console.log("Loaded academic years from cache:", cacheAcademicYearsKey);
-                    setAcademicYears(cachedAcademicYears);
-                    setError(null); // Clear previous errors if loaded from cache
-                    return; // Exit early if loaded from cache
-                }
-            } catch (e) {
-                console.error("Error loading academic years from cache:", e);
-                localStorage.removeItem(cacheAcademicYearsKey); // Clear potentially corrupted cache
-            }
+    //     const fetchAndIntersectReceiving = async () => {
+    //         if (selectedSendingInstitutions.length === 0) {
+    //             return;
+    //         }
 
-            // --- Fetch from API ---
-            // Add loading state if desired: setIsLoadingYears(true);
-            setError(null); // Clear previous errors before fetching
-            fetchData(`academic-years?sendingId=${firstSendingId}&receivingId=${selectedReceivingId}`)
-                .then(data => {
-                    if (data && Object.keys(data).length > 0) {
-                        setAcademicYears(data);
-                        // --- Cache Result ---
-                        try {
-                            localStorage.setItem(cacheAcademicYearsKey, JSON.stringify(data));
-                            console.log("Academic Years cached successfully:", cacheAcademicYearsKey);
-                        } catch (e) {
-                            console.error("Error caching academic years:", e);
-                        }
-                    } else {
-                        // Handle case where API returns no years for the combination
-                        setAcademicYears({});
-                        setError(`No academic years found for the selected combination.`);
-                        console.log("No academic years found from API.");
-                    }
-                })
-                .catch(err => {
-                    setError(`Failed to load academic years: ${err.message}`);
-                    setAcademicYears({}); // Clear years on fetch error
-                })
-                .finally(() => {
-                    // Add loading state if desired: setIsLoadingYears(false);
-                });
+    //         setError(null);
 
-        } else {
-            // If sending or receiving is not selected, clear academic years data
-            console.log("Clearing academic years because sending/receiving is not fully selected.");
-            setAcademicYears({});
-            // Optionally clear year input value as well, though it's handled elsewhere too
-            // setYearInputValue('');
-            // setSelectedYearId(null);
-        }
-        // Dependencies: Run this effect when the selected sending institutions OR the selected receiving ID changes.
-    }, [selectedSendingInstitutions, selectedReceivingId]);
+    //         try {
+    //             if (selectedSendingInstitutions.length === 1) {
+    //                 // --- Fetch for a single sender ---
+    //                 const firstSendingId = selectedSendingInstitutions[0].id;
+    //                 console.log("Fetching receiving for single sender:", firstSendingId);
+    //                 const data = await fetchData(`receiving-institutions?sendingId=${firstSendingId}`);
+    //                 if (data && Object.keys(data).length > 0) {
+    //                     setAvailableReceivingInstitutions(data);
+    //                 } else {
+    //                     setError(`No receiving institutions found with agreements for ${selectedSendingInstitutions[0].name}.`);
+    //                 }
+    //             } else {
+    //                 // --- Fetch for multiple senders and find intersection ---
+    //                 console.log("Fetching receiving for multiple senders:", selectedSendingInstitutions.map(s => s.id));
+    //                 const promises = selectedSendingInstitutions.map(sender =>
+    //                     fetchData(`receiving-institutions?sendingId=${sender.id}`)
+    //                         .catch(err => {
+    //                             // Handle individual fetch errors gracefully, maybe return empty object
+    //                             console.error(`Failed to fetch receiving for ${sender.name} (${sender.id}):`, err);
+    //                             return {}; // Return empty object on error for this sender
+    //                         })
+    //                 );
 
-    // --- MODIFIED Effect for Fetching Receiving Institutions based on ALL Senders ---
-    useEffect(() => {
-        // Clear previous receiving selections and data whenever sending institutions change
-        setReceivingInputValue('');
-        setSelectedReceivingId(null);
-        // ALSO CLEAR YEAR SELECTION when sending institutions change
-        setYearInputValue('');
-        setSelectedYearId(null);
-        setAvailableReceivingInstitutions({});
-        setFilteredReceiving([]);
-        setError(null); // Clear previous errors
+    //                 const results = await Promise.all(promises);
+    //                 console.log("Raw results from multiple fetches:", results);
 
-        const fetchAndIntersectReceiving = async () => {
-            if (selectedSendingInstitutions.length === 0) {
-                setAvailableReceivingInstitutions({}); // No senders, no receivers
-                return;
-            }
+    //                 // Check if any fetch failed completely (returned null/undefined instead of {})
+    //                 if (results.some(res => res === null || typeof res === 'undefined')) {
+    //                      throw new Error("One or more requests for receiving institutions failed.");
+    //                 }
 
-            setIsLoadingReceiving(true); // Start loading
-            setError(null);
+    //                 // Calculate intersection based on IDs
+    //                 if (results.length > 0) {
+    //                     // Get IDs from the first result as the starting point
+    //                     let commonIds = new Set(Object.values(results[0]));
 
-            try {
-                if (selectedSendingInstitutions.length === 1) {
-                    // --- Fetch for a single sender ---
-                    const firstSendingId = selectedSendingInstitutions[0].id;
-                    console.log("Fetching receiving for single sender:", firstSendingId);
-                    const data = await fetchData(`receiving-institutions?sendingId=${firstSendingId}`);
-                    if (data && Object.keys(data).length > 0) {
-                        setAvailableReceivingInstitutions(data);
-                    } else {
-                        setAvailableReceivingInstitutions({});
-                        setError(`No receiving institutions found with agreements for ${selectedSendingInstitutions[0].name}.`);
-                    }
-                } else {
-                    // --- Fetch for multiple senders and find intersection ---
-                    console.log("Fetching receiving for multiple senders:", selectedSendingInstitutions.map(s => s.id));
-                    const promises = selectedSendingInstitutions.map(sender =>
-                        fetchData(`receiving-institutions?sendingId=${sender.id}`)
-                            .catch(err => {
-                                // Handle individual fetch errors gracefully, maybe return empty object
-                                console.error(`Failed to fetch receiving for ${sender.name} (${sender.id}):`, err);
-                                return {}; // Return empty object on error for this sender
-                            })
-                    );
+    //                     // Intersect with IDs from subsequent results
+    //                     for (let i = 1; i < results.length; i++) {
+    //                         const currentIds = new Set(Object.values(results[i]));
+    //                         commonIds = new Set([...commonIds].filter(id => currentIds.has(id)));
+    //                     }
 
-                    const results = await Promise.all(promises);
-                    console.log("Raw results from multiple fetches:", results);
+    //                     console.log("Common receiving institution IDs:", commonIds);
 
-                    // Check if any fetch failed completely (returned null/undefined instead of {})
-                    if (results.some(res => res === null || typeof res === 'undefined')) {
-                         throw new Error("One or more requests for receiving institutions failed.");
-                    }
-
-                    // Calculate intersection based on IDs
-                    if (results.length > 0) {
-                        // Get IDs from the first result as the starting point
-                        let commonIds = new Set(Object.values(results[0]));
-
-                        // Intersect with IDs from subsequent results
-                        for (let i = 1; i < results.length; i++) {
-                            const currentIds = new Set(Object.values(results[i]));
-                            commonIds = new Set([...commonIds].filter(id => currentIds.has(id)));
-                        }
-
-                        console.log("Common receiving institution IDs:", commonIds);
-
-                        // Rebuild the availableReceivingInstitutions object using common IDs
-                        // We need a way to map IDs back to names. We can use the first result
-                        // (or any result that isn't empty) that contains the common IDs.
-                        const intersection = {};
-                        let nameMapSource = results.find(res => Object.keys(res).length > 0) || {};
-                        // Create a reverse map (id -> name) from a source result for efficiency
-                        const idToNameMap = Object.entries(nameMapSource).reduce((acc, [name, id]) => {
-                            acc[id] = name;
-                            return acc;
-                        }, {});
+    //                     // Rebuild the availableReceivingInstitutions object using common IDs
+    //                     // We need a way to map IDs back to names. We can use the first result
+    //                     // (or any result that isn't empty) that contains the common IDs.
+    //                     const intersection = {};
+    //                     let nameMapSource = results.find(res => Object.keys(res).length > 0) || {};
+    //                     // Create a reverse map (id -> name) from a source result for efficiency
+    //                     const idToNameMap = Object.entries(nameMapSource).reduce((acc, [name, id]) => {
+    //                         acc[id] = name;
+    //                         return acc;
+    //                     }, {});
 
 
-                        commonIds.forEach(id => {
-                            // Find the name corresponding to the common ID
-                            const name = idToNameMap[id];
-                            if (name) { // Ensure we found a name
-                                intersection[name] = id;
-                            } else {
-                                console.warn(`Could not find name for common receiving ID: ${id}. This might happen if the ID exists in later results but not the first.`);
-                                // As a fallback, you could try searching other results, but this indicates potential data inconsistency.
-                            }
-                        });
+    //                     commonIds.forEach(id => {
+    //                         // Find the name corresponding to the common ID
+    //                         const name = idToNameMap[id];
+    //                         if (name) { // Ensure we found a name
+    //                             intersection[name] = id;
+    //                         } else {
+    //                             console.warn(`Could not find name for common receiving ID: ${id}. This might happen if the ID exists in later results but not the first.`);
+    //                             // As a fallback, you could try searching other results, but this indicates potential data inconsistency.
+    //                         }
+    //                     });
 
 
-                        if (Object.keys(intersection).length > 0) {
-                            setAvailableReceivingInstitutions(intersection);
-                            console.log("Intersection result:", intersection);
-                        } else {
-                            setAvailableReceivingInstitutions({});
-                            setError("No common receiving institutions found for the selected sending institutions.");
-                        }
-                    } else {
-                        // Should not happen if selectedSendingInstitutions.length > 1, but handle defensively
-                        setAvailableReceivingInstitutions({});
-                    }
-                }
-            } catch (err) {
-                console.error("Error processing receiving institutions:", err);
-                setError(`Failed to load or process receiving institutions: ${err.message}`);
-                setAvailableReceivingInstitutions({}); // Clear on error
-            } finally {
-                setIsLoadingReceiving(false); // Stop loading
-            }
-        };
+    //                     if (Object.keys(intersection).length > 0) {
+    //                         setAvailableReceivingInstitutions(intersection);
+    //                         console.log("Intersection result:", intersection);
+    //                     } else {
+    //                         setError("No common receiving institutions found for the selected sending institutions.");
+    //                     }
+    //                 } else {
+    //                     // Should not happen if selectedSendingInstitutions.length > 1, but handle defensively
+    //                 }
+    //             }
+    //         } catch (err) {
+    //             console.error("Error processing receiving institutions:", err);
+    //             setError(`Failed to load or process receiving institutions: ${err.message}`);
+    //         }
+    //     };
 
-        fetchAndIntersectReceiving();
+    //     fetchAndIntersectReceiving();
 
-    }, [selectedSendingInstitutions]); // Re-run when the list of selected senders changes
-
-    // --- MODIFIED Effect for Fetching Academic Years ---
-    useEffect(() => {
-        // Clear previous year selections and data whenever sending/receiving changes
-        setYearInputValue('');
-        setSelectedYearId(null);
-        setAcademicYears({});
-        setFilteredYears([]);
-        setError(null); // Clear previous errors related to years
-
-        const fetchAndIntersectYears = async () => {
-            // Only proceed if we have at least one sending institution AND a receiving institution selected
-            if (selectedSendingInstitutions.length === 0 || !selectedReceivingId) {
-                setAcademicYears({}); // Clear years if selections are incomplete
-                return;
-            }
-
-            setIsLoadingYears(true); // Start loading years
-            setError(null);
-
-            try {
-                if (selectedSendingInstitutions.length === 1) {
-                    // --- Fetch for a single sender ---
-                    const firstSendingId = selectedSendingInstitutions[0].id;
-                    console.log(`Fetching years for single sender S=${firstSendingId}, R=${selectedReceivingId}`);
-                    const cacheKey = `academic-years-${firstSendingId}-${selectedReceivingId}`;
-                    let cachedYears = null;
-
-                    // Check Cache
-                    try {
-                        const cachedData = localStorage.getItem(cacheKey);
-                        if (cachedData) {
-                            cachedYears = JSON.parse(cachedData);
-                            console.log("Loaded academic years from cache:", cacheKey);
-                            setAcademicYears(cachedYears);
-                            setIsLoadingYears(false); // Stop loading
-                            return;
-                        }
-                    } catch (e) {
-                        console.error("Error loading academic years from cache:", e);
-                        localStorage.removeItem(cacheKey);
-                    }
-
-                    // Fetch from API
-                    const data = await fetchData(`academic-years?sendingId=${firstSendingId}&receivingId=${selectedReceivingId}`);
-                    if (data && Object.keys(data).length > 0) {
-                        setAcademicYears(data);
-                        // Cache Result
-                        try {
-                            localStorage.setItem(cacheKey, JSON.stringify(data));
-                            console.log("Academic Years cached successfully:", cacheKey);
-                        } catch (e) {
-                            console.error("Error caching academic years:", e);
-                        }
-                    } else {
-                        setAcademicYears({});
-                        setError(`No academic years found for ${selectedSendingInstitutions[0].name} and the selected receiving institution.`);
-                    }
-                } else {
-                    // --- Fetch for multiple senders and find intersection ---
-                    console.log(`Fetching years for multiple senders (Count: ${selectedSendingInstitutions.length}), R=${selectedReceivingId}`);
-                    const promises = selectedSendingInstitutions.map(sender =>
-                        fetchData(`academic-years?sendingId=${sender.id}&receivingId=${selectedReceivingId}`)
-                            .catch(err => {
-                                console.error(`Failed to fetch years for S=${sender.id}, R=${selectedReceivingId}:`, err);
-                                return {}; // Return empty object on error for this sender/receiver pair
-                            })
-                    );
-
-                    const results = await Promise.all(promises);
-                    console.log("Raw year results from multiple fetches:", results);
-
-                    // Check if any fetch failed completely
-                    if (results.some(res => res === null || typeof res === 'undefined')) {
-                        throw new Error("One or more requests for academic years failed.");
-                    }
-
-                    // Calculate intersection based on IDs
-                    if (results.length > 0 && results.every(res => typeof res === 'object' && res !== null)) {
-                        // Get IDs from the first valid result as the starting point
-                        let commonIds = new Set(Object.values(results[0]));
-
-                        // Intersect with IDs from subsequent results
-                        for (let i = 1; i < results.length; i++) {
-                            const currentIds = new Set(Object.values(results[i]));
-                            commonIds = new Set([...commonIds].filter(id => currentIds.has(id)));
-                        }
-
-                        console.log("Common academic year IDs:", commonIds);
-
-                        // Rebuild the academicYears object using common IDs
-                        const intersection = {};
-                        let nameMapSource = results.find(res => Object.keys(res).length > 0) || {};
-                        const idToNameMap = Object.entries(nameMapSource).reduce((acc, [name, id]) => {
-                            acc[id] = name;
-                            return acc;
-                        }, {});
-
-                        commonIds.forEach(id => {
-                            const name = idToNameMap[id];
-                            if (name) {
-                                intersection[name] = id;
-                            } else {
-                                console.warn(`Could not find name for common academic year ID: ${id}.`);
-                            }
-                        });
-
-                        if (Object.keys(intersection).length > 0) {
-                            setAcademicYears(intersection);
-                            console.log("Intersection year result:", intersection);
-                        } else {
-                            setAcademicYears({});
-                            setError("No common academic years found for the selected combination of institutions.");
-                        }
-                    } else {
-                        setAcademicYears({}); // Clear if results are invalid
-                        if (results.length > 0) { // Only set error if we expected results
-                           setError("Could not process academic years from one or more sources.");
-                        }
-                    }
-                }
-            } catch (err) {
-                console.error("Error processing academic years:", err);
-                setError(`Failed to load or process academic years: ${err.message}`);
-                setAcademicYears({}); // Clear on error
-            } finally {
-                setIsLoadingYears(false); // Stop loading
-            }
-        };
-
-        fetchAndIntersectYears();
-
-        // Cleanup function to potentially cancel fetches if component unmounts or dependencies change quickly
-        // return () => { /* Add cleanup logic if using AbortController */ };
-
-    }, [selectedSendingInstitutions, selectedReceivingId]); // Re-run when senders or receiver changes
+    // }, [selectedSendingInstitutions]); // Re-run when the list of selected senders changes
 
     // --- Effects for Filtering Dropdowns ---
     const filter = useCallback(
@@ -494,7 +311,6 @@ const CollegeTransferForm = () => {
                 setYearInputValue('');
                 setSelectedYearId(null);
                 // Also clear existing academic years data as it's now invalid
-                setAcademicYears({});
                 setShowReceivingDropdown(false);
                 setFilteredReceiving([]);
                 break;
@@ -560,7 +376,7 @@ const CollegeTransferForm = () => {
     return (
         <div style={{ maxWidth: "960px"}}>
             <h1>College Transfer AI</h1>
-            {error && <div style={{ color: 'red', marginBottom: '1em' }}>Error: {error}</div>}
+            {combinedError && <div style={{ color: 'red', marginBottom: '1em' }}>Error: {combinedError}</div>}
 
             {/* Sending Institution Section */}
             <div className="form-group">

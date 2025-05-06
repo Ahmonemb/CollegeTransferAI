@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { fetchData } from '../services/api';
 
 export function useChat(
-    imageFilenames,
+    imageFilenames, // This holds the list of all relevant image filenames
     selectedMajorName,
     user,
     sendingInstitutionId,
@@ -27,30 +27,54 @@ export function useChat(
         setUserInput('');
         setChatError(null);
         initialAnalysisSentRef.current = false;
-        console.log("Chat cleared due to new context or user change.");
-    }, [imageFilenames, selectedMajorName, user]);
+        console.log("DEBUG: Chat cleared and initialAnalysisSentRef reset due to context/user change.");
+    }, [imageFilenames, selectedMajorName, user, sendingInstitutionId, receivingInstitutionId, academicYearId]); // Added more dependencies to ensure reset
 
     // Effect to send initial analysis request
     useEffect(() => {
+        console.log("DEBUG: Initial analysis effect triggered.");
+        console.log("DEBUG: User:", user ? `Logged in (ID: ${user.uid})` : "Not logged in");
+        // Use the stable list of all image filenames passed in
+        console.log("DEBUG: imageFilenames (for initial analysis):", imageFilenames);
+        console.log("DEBUG: initialAnalysisSentRef.current:", initialAnalysisSentRef.current);
+        console.log("DEBUG: isLoading:", isLoading);
+
         if (!user) {
-            initialAnalysisSentRef.current = false;
+            console.log("DEBUG: Skipping initial analysis - User not logged in.");
+            initialAnalysisSentRef.current = false; // Ensure it's false if user logs out
             return;
         }
 
-        if (imageFilenames && imageFilenames.length > 0 && !initialAnalysisSentRef.current && !isLoading) {
+        // Check the condition for sending using the stable imageFilenames list
+        const shouldSend = imageFilenames && imageFilenames.length > 0 && !initialAnalysisSentRef.current && !isLoading;
+        console.log("DEBUG: Should send initial analysis?", shouldSend);
+
+        // --- Temporarily disabled initial analysis sending ---
+        // if (shouldSend) {
+        if (shouldSend) { 
+        // --- End temporary disable ---
             const sendInitialAnalysis = async () => {
+                // Double-check user and token right before sending
                 if (!user || !user.idToken) {
-                    console.error("Cannot send initial analysis: User not logged in or token missing.");
+                    console.error("DEBUG: Cannot send initial analysis: User logged out or token missing just before sending.");
                     setChatError("Authentication error. Please log in again.");
                     setMessages([{ type: 'system', text: "Authentication error. Please log in again." }]);
-                    initialAnalysisSentRef.current = false;
+                    initialAnalysisSentRef.current = false; // Reset if auth fails here
                     return;
                 }
 
-                console.log("Sending initial analysis request...");
+                console.log("DEBUG: Conditions met. Calling sendInitialAnalysis function...");
                 setIsLoading(true);
                 setChatError(null);
-                initialAnalysisSentRef.current = true;
+                initialAnalysisSentRef.current = true; // Set flag immediately
+                console.log("DEBUG: initialAnalysisSentRef.current set to true.");
+
+                // Log context variables used in the prompt
+                console.log("DEBUG: Context for prompt - academicYearId:", academicYearId);
+                console.log("DEBUG: Context for prompt - sendingInstitutionId:", sendingInstitutionId);
+                console.log("DEBUG: Context for prompt - receivingInstitutionId:", receivingInstitutionId);
+                console.log("DEBUG: Context for prompt - selectedMajorName:", selectedMajorName);
+                console.log("DEBUG: Context for prompt - allSendingInstitutionIds:", allSendingInstitutionIds);
 
                 const currentContextInfo = `The user is viewing an articulation agreement for the academic year ${academicYearId || 'N/A'} between sending institution ID ${sendingInstitutionId || 'N/A'} (the 'current' agreement) and receiving institution ID ${receivingInstitutionId || 'N/A'}. The selected major/department is "${selectedMajorName || 'N/A'}".`;
                 const overallContextInfo = allSendingInstitutionIds && allSendingInstitutionIds.length > 1
@@ -64,23 +88,28 @@ ${overallContextInfo ? `**Overall Context:** ${overallContextInfo}` : ''}
 
 Analyze the provided agreement images thoroughly. Perform the following steps:
 1.  **Focus on the Current Context:** Analyze the agreement for the major between the **current sending institution** and the receiving institution.
-2.  **Explicitly state the current context:** Start your response with: "Analyzing the agreement for the [Major Name] (bold) major between [Current Sending Instituion Name] (bold) and [Receiving Institution Name] (bold) for the [academic year name] (bold) academic year."
-3.  **Provide a concise summary** of the key details for the **current** agreement (articulated courses, requirements, etc.). Identify any required courses for the major at the receiving institution that are **not articulated** by the current sending institution.
-4.  **Compare Articulation (If Applicable):** If you identified non-articulated courses in step 3 AND other sending institutions were selected (see Overall Context), examine the provided images for the **other** agreements (Sending IDs: ${allSendingInstitutionIds.filter(id => id !== sendingInstitutionId).join(', ') || 'None'}). For each non-articulated course from the current agreement, state whether it **is articulated** by any of the **other** sending institutions based on their respective agreements. Present this comparison clearly, perhaps in a separate section or list.
+2.  **Explicitly state the current context:** Start your response with: "Analyzing the agreement for the **[Major Name]** major between **[Current Sending Institution Name]** and **[Receiving Institution Name]** for the **[academic year name]** academic year." (Replace bracketed placeholders with actual names/year).
+3.  **Provide a detailed, accurate, yet concise summary** of the key details for the **current** agreement. This summary should include:
+    *   All articulated courses (sending course -> receiving course).
+    *   Any specific GPA requirements mentioned.
+    *   Any other critical requirements or notes from the agreement.
+    *   Crucially, identify any required courses for the major at the receiving institution that are **not articulated** by the current sending institution according to this agreement. List these clearly.
+4.  **Compare Articulation (If Applicable):** If you identified non-articulated courses in step 3 AND other sending institutions were selected (see Overall Context), examine the provided images for the **other** agreements (Sending IDs: ${allSendingInstitutionIds?.filter(id => id !== sendingInstitutionId).join(', ') || 'None'}). For each non-articulated course from the current agreement, state whether it **is articulated** by any of the **other** sending institutions based on their respective agreements. Present this comparison clearly, perhaps in a separate section or list (e.g., "Comparison with Other Selected Colleges:").
 5.  **Suggest Next Steps:** Conclude with relevant advice or next steps for the student based on the analysis and comparison.
+6.  **Offer Education Plan:** After providing the analysis and next steps, ask the user: "Would you like me to generate a potential 2-year education plan based on this information? If yes, I will outline courses semester-by-semester (Year 1 Fall, Year 1 Spring, Year 1 Summer, Year 2 Fall, Year 2 Spring, Year 2 Summer) aiming for approximately 4 classes per Fall/Spring semester and 2 classes during the Summer. This plan will incorporate courses from the **[Sending Institution(s) names]** to meet the requirements for the **[Receiving Institution name]**. For each course, I will include its *unit count* and *check for common prerequisites* using my knowledge base. If the prerequisite information isn't readily available, I can perform a web search to find it. Importantly, I will ensure that any identified prerequisite course is placed in a semester *before* the course that requires it."
 
-**Formatting:** Use bullet points (* or -) for lists, **bold** for emphasis, and \`italic\` for course codes/titles.`;
+**Formatting:** Use bullet points (* or -) for lists, **bold** for emphasis (especially names and key terms), and \`italic\` for course codes/titles. Ensure the summary in step 3 is well-organized and easy to read.`;
 
                 setMessages([{ type: 'system', text: "Analyzing agreements and generating summary..." }]);
 
                 const payload = {
                     new_message: initialPrompt,
                     history: [],
-                    image_filenames: imageFilenames
+                    image_filenames: imageFilenames // Use the stable list here
                 };
 
                 try {
-                    console.log("Sending initial analysis to /chat:", payload);
+                    console.log("DEBUG: Sending initial analysis to /chat with payload:", payload);
                     const response = await fetchData('chat', {
                         method: 'POST',
                         headers: {
@@ -89,6 +118,7 @@ Analyze the provided agreement images thoroughly. Perform the following steps:
                         },
                         body: JSON.stringify(payload)
                     });
+                    console.log("DEBUG: Received response from /chat:", response);
 
                     if (response && response.reply) {
                         setMessages([{ type: 'bot', text: response.reply }]);
@@ -99,20 +129,33 @@ Analyze the provided agreement images thoroughly. Perform the following steps:
                         throw new Error(response?.error || "No reply received for initial analysis.");
                     }
                 } catch (err) {
-                    console.error("Initial analysis API error:", err);
+                    console.error("DEBUG: Initial analysis API error:", err);
                     const errorMsg = `Failed initial analysis: ${err.message}`;
                     setChatError(errorMsg);
                     setMessages([{ type: 'system', text: `Error during analysis: ${err.message}` }]);
                     if (err.message.includes("Authorization")) {
-                        initialAnalysisSentRef.current = false;
+                        console.log("DEBUG: Resetting initialAnalysisSentRef due to Authorization error.");
+                        initialAnalysisSentRef.current = false; // Reset if auth fails
+                    } else {
+                        // Consider if other errors should also reset the flag,
+                        // maybe allow retry? For now, keep it true on other errors.
+                        console.log("DEBUG: Keeping initialAnalysisSentRef true despite non-auth error.");
                     }
                 } finally {
+                    console.log("DEBUG: Initial analysis finished (success or error). Setting isLoading to false.");
                     setIsLoading(false);
                 }
             };
 
             sendInitialAnalysis();
+        } else {
+            console.log("DEBUG: Conditions not met for sending initial analysis.");
+            if (!imageFilenames || imageFilenames.length === 0) console.log("Reason: No image filenames provided.");
+            if (initialAnalysisSentRef.current) console.log("Reason: Initial analysis already sent.");
+            if (isLoading) console.log("Reason: Already loading.");
         }
+    // Ensure all relevant context variables are dependencies
+    // Use the stable imageFilenames list in the dependency array
     }, [imageFilenames, isLoading, selectedMajorName, sendingInstitutionId, allSendingInstitutionIds, receivingInstitutionId, academicYearId, user]);
 
     const handleSend = useCallback(async () => {
@@ -140,9 +183,11 @@ Analyze the provided agreement images thoroughly. Perform the following steps:
                 content: msg.text
             }));
 
+        // Include image_filenames in the payload for every message
         const payload = {
             new_message: currentInput,
-            history: apiHistory
+            history: apiHistory,
+            image_filenames: imageFilenames // Add the list of all image filenames here
         };
 
         try {
@@ -171,7 +216,8 @@ Analyze the provided agreement images thoroughly. Perform the following steps:
         } finally {
             setIsLoading(false);
         }
-    }, [userInput, isLoading, user, messages]); // Dependencies for handleSend
+    // Add imageFilenames to the dependency array for useCallback
+    }, [userInput, isLoading, user, messages, imageFilenames]);
 
     return {
         userInput,

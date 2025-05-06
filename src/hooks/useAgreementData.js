@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { fetchData } from '../services/api'; // Assuming api.js is in services
 
 const IGETC_ID = 'IGETC';
+const LOCAL_STORAGE_PREFIX = 'ctaCache_'; // Prefix for local storage keys
 
 export function useAgreementData(initialSendingId, receivingId, yearId, user, allSelectedSendingInstitutions) {
     // --- State for Agreement Data ---
@@ -22,10 +23,10 @@ export function useAgreementData(initialSendingId, receivingId, yearId, user, al
     const [agreementData, setAgreementData] = useState([]); // Will include IGETC if available
     const [activeTabIndex, setActiveTabIndex] = useState(0); // Start potentially at IGETC (index 0)
     const [imagesForActivePdf, setImagesForActivePdf] = useState([]);
-    // const [allAgreementsImageFilenames, setAllAgreementsImageFilenames] = useState([]); // Removed: Not directly used/needed if caching by filename
 
-    // --- Cache Ref for Images ---
+    // --- Cache Refs ---
     const imageCacheRef = useRef({}); // Store images keyed by PDF filename
+    const categoryCacheRef = useRef({}); // In-memory cache for majors/depts
 
     // --- Derived state ---
     const currentAgreement = activeTabIndex >= 0 && activeTabIndex < agreementData.length ? agreementData[activeTabIndex] : null;
@@ -43,13 +44,38 @@ export function useAgreementData(initialSendingId, receivingId, yearId, user, al
         setHasMajorsAvailable(false); // Reset on change
         setHasDepartmentsAvailable(false);
 
+        // --- Add Cache Key for Availability ---
+        const availabilityContextKey = `availability_${initialSendingId}-${receivingId}-${yearId}`;
+
         const checkAvailability = async (category) => {
+            // --- Check localStorage for specific category availability ---
+            const availabilityLocalStorageKey = `${availabilityContextKey}_${category}`;
+            try {
+                const cachedAvailability = localStorage.getItem(availabilityLocalStorageKey);
+                if (cachedAvailability !== null) { // Check for null, as 'false' is a valid cached value
+                    console.log(`Cache hit for availability (${availabilityLocalStorageKey}): ${cachedAvailability}`);
+                    return cachedAvailability === 'true'; // Convert stored string back to boolean
+                }
+            } catch (e) {
+                 console.error("Error reading availability from localStorage:", e);
+                 localStorage.removeItem(availabilityLocalStorageKey);
+            }
+
+            // --- Fetch if not in cache ---
+            console.log(`Cache miss for availability (${availabilityLocalStorageKey}). Fetching...`);
             try {
                 const data = await fetchData(`/majors?sendingId=${initialSendingId}&receivingId=${receivingId}&academicYearId=${yearId}&categoryCode=${category}`);
-                return Object.keys(data || {}).length > 0;
+                const exists = Object.keys(data || {}).length > 0;
+                // --- Store result in localStorage ---
+                try {
+                    localStorage.setItem(availabilityLocalStorageKey, exists ? 'true' : 'false');
+                } catch (e) {
+                    console.error("Error writing availability to localStorage:", e);
+                }
+                return exists;
             } catch (err) {
                 console.error(`Error checking availability for ${category}:`, err);
-                return false;
+                return false; // Don't cache errors for availability check
             }
         };
 
@@ -68,13 +94,16 @@ export function useAgreementData(initialSendingId, receivingId, yearId, user, al
     }, [initialSendingId, receivingId, yearId, selectedCategory]);
 
 
-    // --- Fetch Majors/Departments ---
+    // --- Fetch Majors/Departments (with Caching: localStorage -> useRef -> Fetch) ---
     useEffect(() => {
         if (isLoadingAvailability || !initialSendingId || !receivingId || !yearId) {
             if (!initialSendingId || !receivingId || !yearId) setError("Missing selection criteria.");
+            setMajors({}); // Clear majors if context is missing
+            setIsLoadingMajors(false); // Not loading if no context
             return;
         }
 
+        // Check availability before attempting fetch or cache lookup
         if ((selectedCategory === 'major' && !hasMajorsAvailable) || (selectedCategory === 'dept' && !hasDepartmentsAvailable)) {
             setError(`No ${selectedCategory}s found for the selected combination.`);
             setIsLoadingMajors(false);
@@ -82,24 +111,81 @@ export function useAgreementData(initialSendingId, receivingId, yearId, user, al
             return;
         }
 
+        // --- Create Cache Keys ---
+        const contextKey = `${initialSendingId}-${receivingId}-${yearId}`; // Key for institution/year combo
+        const categoryKey = selectedCategory; // Key for 'major' or 'dept' within the context
+        const localStorageKey = `${LOCAL_STORAGE_PREFIX}${contextKey}_${categoryKey}`; // Full localStorage key
+
+        // --- 1. Check localStorage ---
+        try {
+            const cachedDataString = localStorage.getItem(localStorageKey);
+            if (cachedDataString) {
+                console.log(`LocalStorage hit for ${localStorageKey}.`);
+                const cachedData = JSON.parse(cachedDataString);
+                // Update in-memory cache as well
+                if (!categoryCacheRef.current[contextKey]) {
+                    categoryCacheRef.current[contextKey] = {};
+                }
+                categoryCacheRef.current[contextKey][categoryKey] = cachedData;
+                setMajors(cachedData);
+                setError(null);
+                setIsLoadingMajors(false);
+                return; // Skip further checks/fetch
+            }
+        } catch (e) {
+            console.error("Error reading from localStorage:", e);
+            // Clear potentially corrupted item
+            localStorage.removeItem(localStorageKey);
+        }
+
+        // --- 2. Check In-Memory Cache (useRef) ---
+        if (categoryCacheRef.current[contextKey]?.[categoryKey]) {
+            console.log(`In-memory cache hit for ${categoryKey} in context ${contextKey}.`);
+            setMajors(categoryCacheRef.current[contextKey][categoryKey]);
+            setError(null);
+            setIsLoadingMajors(false);
+            return; // Skip fetch
+        }
+
+        // --- 3. Fetch if not in cache ---
+        console.log(`Cache miss for ${localStorageKey}. Fetching...`);
         setIsLoadingMajors(true);
         setError(null);
-        setMajors({});
+        setMajors({}); // Clear majors before fetching new ones
 
         const fetchCategoryData = async () => {
             try {
                 const data = await fetchData(`/majors?sendingId=${initialSendingId}&receivingId=${receivingId}&academicYearId=${yearId}&categoryCode=${selectedCategory}`);
-                setMajors(data || {});
+                const fetchedData = data || {};
+                setMajors(fetchedData);
+                // --- Store in In-Memory Cache ---
+                if (!categoryCacheRef.current[contextKey]) {
+                    categoryCacheRef.current[contextKey] = {};
+                }
+                categoryCacheRef.current[contextKey][categoryKey] = fetchedData;
+
+                // --- Store in localStorage ---
+                try {
+                    localStorage.setItem(localStorageKey, JSON.stringify(fetchedData));
+                    console.log(`Fetched and cached ${categoryKey}s in localStorage (${localStorageKey}).`);
+                } catch (e) {
+                    console.error("Error writing to localStorage:", e);
+                    // Handle potential storage full errors if necessary
+                }
+
             } catch (err) {
                 console.error(`Error fetching ${selectedCategory}s:`, err);
                 setError(`Failed to load ${selectedCategory}s.`);
                 setMajors({});
+                // Optionally clear cache entry on error? Or keep stale? For now, don't cache errors.
+                // delete categoryCacheRef.current[cacheKey];
             } finally {
                 setIsLoadingMajors(false);
             }
         };
 
         fetchCategoryData();
+    // Dependencies now include selectedCategory directly
     }, [initialSendingId, receivingId, yearId, selectedCategory, isLoadingAvailability, hasMajorsAvailable, hasDepartmentsAvailable]);
 
 
@@ -138,7 +224,8 @@ export function useAgreementData(initialSendingId, receivingId, yearId, user, al
             // 1. Fetch IGETC Agreement Filename (if logged in and context available)
             if (user && user.idToken && contextSendingId && yearId) {
                 try {
-                    const igetcResponse = await fetchData(`/igetc-agreement?sendingId=${contextSendingId}&academicYearId=${yearId}`, {
+                    // Remove the leading slash from the endpoint path
+                    const igetcResponse = await fetchData(`igetc-agreement?sendingId=${contextSendingId}&academicYearId=${yearId}`, {
                         headers: { 'Authorization': `Bearer ${user.idToken}` }
                     });
                     if (igetcResponse?.pdfFilename) {
@@ -162,7 +249,8 @@ export function useAgreementData(initialSendingId, receivingId, yearId, user, al
 
             // 2. Fetch Major Articulation Agreements
             const sendingIds = allSelectedSendingInstitutions.map(inst => inst.id);
-            const response = await fetchData('/articulation-agreements', {
+            // Remove the leading slash here too if fetchData is used similarly
+            const response = await fetchData('articulation-agreements', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ sending_ids: sendingIds, receiving_id: receivingId, year_id: yearId, major_key: majorKey }) // Use passed majorKey
@@ -251,6 +339,7 @@ export function useAgreementData(initialSendingId, receivingId, yearId, user, al
     // Dependencies: All inputs that should trigger a full refetch when they change.
     // Note: `majorKey` is passed as an argument, so it doesn't need to be a dependency here.
     // `user` dependency ensures refetch if login state changes (for IGETC).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [allSelectedSendingInstitutions, receivingId, yearId, initialSendingId, user?.idToken]); // Refined dependencies
 
 
@@ -302,14 +391,36 @@ export function useAgreementData(initialSendingId, receivingId, yearId, user, al
         console.log("Core context changed (URL params), resetting selections and agreement data.");
         setSelectedMajorKey(null); setSelectedMajorName('');
         setAgreementData([]);
-        // setAllAgreementsImageFilenames([]); // Removed state
-        setActiveTabIndex(0); // Default back to index 0
+        setActiveTabIndex(0);
         setImagesForActivePdf([]);
-        setPdfError(null); // Clear errors
-        setIsLoadingPdf(false); // Ensure loading is off
-        // Clear image cache when core context changes, as agreements might be different
+        setPdfError(null);
+        setIsLoadingPdf(false);
+        // Clear image cache
         imageCacheRef.current = {};
         console.log("Image cache cleared due to context change.");
+        // --- Clear In-Memory Category Cache ---
+        // We clear the whole ref when context changes
+        categoryCacheRef.current = {};
+        console.log("In-memory category cache cleared due to context change.");
+        // --- Clear Relevant localStorage ---
+        // Option 1: Clear ALL cache related to this app (simpler)
+        // Object.keys(localStorage).forEach(key => {
+        //     if (key.startsWith(LOCAL_STORAGE_PREFIX)) {
+        //         localStorage.removeItem(key);
+        //     }
+        // });
+        // console.log("Cleared all app-related localStorage cache.");
+        // Option 2: Be more specific (requires knowing old keys, harder)
+        // For now, let stale data exist; new context will use new keys.
+        // Reset availability states and trigger re-check
+        setHasMajorsAvailable(true); // Assume available until checked
+        setHasDepartmentsAvailable(true);
+        setIsLoadingAvailability(true); // Trigger availability check
+        // Reset majors state immediately
+        setMajors({});
+        setError(null);
+        setIsLoadingMajors(true); // Will be set correctly by fetch/cache logic
+
     }, [initialSendingId, receivingId, yearId]);
 
     // --- Handlers ---
@@ -335,19 +446,23 @@ export function useAgreementData(initialSendingId, receivingId, yearId, user, al
 
     const handleCategoryChange = useCallback((event) => {
         const newCategory = event.target.value;
+        // Only update state if category actually changes
+        if (newCategory === selectedCategory) return;
+
+        console.log("Category changed to:", newCategory);
         setSelectedCategory(newCategory);
         // Reset major selection and agreement data when category changes
         setSelectedMajorKey(null); setSelectedMajorName('');
         setMajorSearchTerm('');
         setAgreementData([]);
-        // setAllAgreementsImageFilenames([]); // Removed state
         setImagesForActivePdf([]);
         setActiveTabIndex(0);
-        setError(null);
+        // setError(null); // Error will be handled by the fetch/cache useEffect
         setPdfError(null);
-        setIsLoadingPdf(false); // Ensure loading is off
-        // Keep image cache, category change doesn't invalidate PDFs for same context
-    }, []);
+        setIsLoadingPdf(false);
+        // DO NOT clear category cache here - we want to reuse it if switching back
+        // The useEffect for fetching majors will handle loading/cache check
+    }, [selectedCategory]); // Added selectedCategory dependency
 
     const handleTabClick = useCallback((index) => {
         if (index === activeTabIndex) return;

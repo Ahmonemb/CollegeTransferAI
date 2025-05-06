@@ -1,69 +1,21 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { fetchData } from '../services/api';
 
-// Helper function to calculate intersection of receiving institutions
-const calculateIntersection = (results) => {
-    if (!results || results.length === 0 || results.some(res => res === null || typeof res === 'undefined')) {
-        return {};
-    }
-
-    // Filter out any potentially empty results before processing
-    const validResults = results.filter(res => typeof res === 'object' && res !== null && Object.keys(res).length > 0);
-
-    if (validResults.length === 0) {
-        return {}; // No valid data to intersect
-    }
-
-    // Get IDs from the first valid result as the starting point
-    let commonIds = new Set(Object.values(validResults[0]));
-
-    // Intersect with IDs from subsequent valid results
-    for (let i = 1; i < validResults.length; i++) {
-        const currentIds = new Set(Object.values(validResults[i]));
-        commonIds = new Set([...commonIds].filter(id => currentIds.has(id)));
-    }
-
-    console.log("Common receiving institution IDs:", commonIds);
-
-    // Rebuild the availableReceivingInstitutions object using common IDs
-    const intersection = {};
-    // Use the first valid result to map IDs back to names
-    const nameMapSource = validResults[0];
-    const idToNameMap = Object.entries(nameMapSource).reduce((acc, [name, id]) => {
-        acc[id] = name;
-        return acc;
-    }, {});
-
-    commonIds.forEach(id => {
-        const name = idToNameMap[id];
-        if (name) {
-            intersection[name] = id;
-        } else {
-            console.warn(`Could not find name for common receiving ID: ${id}.`);
-            // Attempt to find name in other results as a fallback (more robust but less efficient)
-            for (const res of validResults) {
-                const foundEntry = Object.entries(res).find(([, resId]) => resId === id);
-                if (foundEntry) {
-                    intersection[foundEntry[0]] = id;
-                    break;
-                }
-            }
-        }
-    });
-
-    console.log("Intersection result:", intersection);
-    return intersection;
-};
-
+const LOCAL_STORAGE_PREFIX = 'ctaCache_';
+// Remove calculateIntersection helper from frontend
 
 export function useReceivingInstitutions(selectedSendingInstitutions) {
     const [availableReceivingInstitutions, setAvailableReceivingInstitutions] = useState({});
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState(null);
+    const cacheRef = useRef({}); // Simple in-memory cache for this hook instance
+
+    // Define senderIds outside useEffect to use in dependency array
+    const senderIds = selectedSendingInstitutions.map(s => s.id);
+    const senderIdsString = senderIds.sort().join(','); // Create sorted, comma-separated string for cache key & query
 
     useEffect(() => {
         let isMounted = true;
-        const senderIds = selectedSendingInstitutions.map(s => s.id);
 
         if (senderIds.length === 0) {
             setAvailableReceivingInstitutions({});
@@ -72,60 +24,79 @@ export function useReceivingInstitutions(selectedSendingInstitutions) {
             return; // No senders, no need to fetch
         }
 
-        const fetchAndIntersect = async () => {
+        const fetchCommonReceiving = async () => {
             if (!isMounted) return;
             setIsLoading(true);
             setError(null);
             setAvailableReceivingInstitutions({}); // Clear previous results
 
+            const localStorageKey = `${LOCAL_STORAGE_PREFIX}receiving_intersection_${senderIdsString}`;
+            const memoryCacheKey = `receiving_${senderIdsString}`;
+
+            // 1. Check In-Memory Cache
+            if (cacheRef.current[memoryCacheKey]) {
+                console.log(`In-memory cache hit for receiving intersection: ${senderIdsString}`);
+                setAvailableReceivingInstitutions(cacheRef.current[memoryCacheKey]);
+                setIsLoading(false);
+                return;
+            }
+
+            // 2. Check localStorage
             try {
-                let data;
-                if (senderIds.length === 1) {
-                    // --- Fetch for a single sender ---
-                    const sendingId = senderIds[0];
-                    console.log("Fetching receiving for single sender:", sendingId);
-                    data = await fetchData(`receiving-institutions?sendingId=${sendingId}`);
-                    if (!isMounted) return;
-                    if (data && Object.keys(data).length > 0) {
-                        setAvailableReceivingInstitutions(data);
-                    } else {
-                        setAvailableReceivingInstitutions({});
-                        setError(`No receiving institutions found with agreements for the selected sender.`);
-                    }
-                } else {
-                    // --- Fetch for multiple senders and find intersection ---
-                    console.log("Fetching receiving for multiple senders:", senderIds);
-                    const promises = senderIds.map(id =>
-                        fetchData(`receiving-institutions?sendingId=${id}`)
-                            .catch(err => {
-                                console.error(`Failed to fetch receiving for sender ${id}:`, err);
-                                return {}; // Return empty object on error for this sender
-                            })
-                    );
-
-                    const results = await Promise.all(promises);
-                    if (!isMounted) return;
-                    console.log("Raw results from multiple fetches:", results);
-
-                    if (results.some(res => res === null || typeof res === 'undefined')) {
-                         throw new Error("One or more requests for receiving institutions failed.");
-                    }
-
-                    const intersection = calculateIntersection(results);
-
-                    if (Object.keys(intersection).length > 0) {
-                        setAvailableReceivingInstitutions(intersection);
-                    } else {
-                        setAvailableReceivingInstitutions({});
-                        setError("No common receiving institutions found for the selected sending institutions.");
-                    }
+                const cachedDataString = localStorage.getItem(localStorageKey);
+                if (cachedDataString) {
+                    console.log(`LocalStorage hit for receiving intersection (${localStorageKey})`);
+                    const cachedData = JSON.parse(cachedDataString);
+                    cacheRef.current[memoryCacheKey] = cachedData; // Update in-memory
+                    setAvailableReceivingInstitutions(cachedData);
+                    setIsLoading(false);
+                    return;
                 }
+            } catch (e) {
+                console.error(`Error reading receiving intersection from localStorage (${localStorageKey}):`, e);
+                localStorage.removeItem(localStorageKey);
+            }
+
+            // 3. Fetch from API (Single Call)
+            console.log(`Cache miss for receiving intersection (${senderIdsString}). Fetching...`);
+            try {
+                // Pass comma-separated string
+                const data = await fetchData(`receiving-institutions?sendingId=${senderIdsString}`);
+
+                if (!isMounted) return;
+
+                let finalData = {};
+                let warnings = null;
+
+                // Handle potential 207 Multi-Status response
+                if (data && data.institutions !== undefined) {
+                    finalData = data.institutions || {};
+                    warnings = data.warnings;
+                    if (warnings) console.warn("Partial fetch failure for receiving institutions:", warnings);
+                } else {
+                    finalData = data || {}; // Assume direct object if not 207 structure
+                }
+
+                if (Object.keys(finalData).length === 0 && !warnings) {
+                     setError("No common receiving institutions found for the selected sending institutions.");
+                }
+
+                setAvailableReceivingInstitutions(finalData);
+                cacheRef.current[memoryCacheKey] = finalData; // Store in memory
+
+                // Store in localStorage
+                try {
+                    localStorage.setItem(localStorageKey, JSON.stringify(finalData));
+                } catch (e) {
+                    console.error(`Error writing receiving intersection to localStorage (${localStorageKey}):`, e);
+                }
+
             } catch (err) {
-                console.error("Error processing receiving institutions:", err);
-                 if (isMounted) {
-                    setError(`Failed to load or process receiving institutions: ${err.message}`);
+                console.error("Error fetching common receiving institutions:", err);
+                if (isMounted) {
+                    setError(`Failed to load common receiving institutions: ${err.message}`);
                     setAvailableReceivingInstitutions({}); // Clear on error
-                 }
+                }
             } finally {
                 if (isMounted) {
                     setIsLoading(false); // Stop loading
@@ -133,14 +104,14 @@ export function useReceivingInstitutions(selectedSendingInstitutions) {
             }
         };
 
-        fetchAndIntersect();
+        fetchCommonReceiving();
 
         return () => {
             isMounted = false; // Cleanup
         };
-    // Re-run when the list of selected senders changes (deep comparison isn't perfect here, but IDs changing is the key)
+    // Depend on the sorted string representation of sender IDs
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [JSON.stringify(selectedSendingInstitutions.map(s => s.id))]);
+    }, [senderIdsString]);
 
     return { availableReceivingInstitutions, isLoading, error };
 }

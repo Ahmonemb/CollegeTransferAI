@@ -28,10 +28,16 @@ function AgreementViewerPage({ user, userTier }) {
     const { sendingId: initialSendingId, receivingId, yearId } = useParams();
     const location = useLocation();
 
+    // Memoize the array of institution objects
     const allSelectedSendingInstitutions = useMemo(() => {
         // Use the *first* selected institution for IGETC fetching logic
         return location.state?.allSelectedSendingInstitutions || [{ id: initialSendingId, name: 'Unknown Sending Institution' }];
     }, [location.state?.allSelectedSendingInstitutions, initialSendingId]);
+
+    // Memoize the array of institution IDs derived from the above
+    const memoizedAllSendingInstitutionIds = useMemo(() => {
+        return allSelectedSendingInstitutions.map(inst => inst.id);
+    }, [allSelectedSendingInstitutions]); // Dependency is the memoized object array
 
     // --- State for Majors Column Visibility ---
     const [isMajorsVisible, setIsMajorsVisible] = useState(true);
@@ -63,15 +69,35 @@ function AgreementViewerPage({ user, userTier }) {
 
     // --- Toggle Majors Visibility ---
     const toggleMajorsVisibility = () => {
-        const gapWidth = 16; // Assuming 1em = 16px
+        const gapWidth = 16; // Assuming 1em = 16px (sync with CSS if using em)
+        const majorsColumnTotalWidth = FIXED_MAJORS_WIDTH + gapWidth;
+
         setIsMajorsVisible(prevVisible => {
             const nextVisible = !prevVisible;
-            // Adjust chat width if hiding majors to prevent jump
-            if (!nextVisible && containerRef.current) {
+
+            if (containerRef.current) {
                 const containerWidth = containerRef.current.getBoundingClientRect().width;
                 const pdfMinWidth = MIN_COL_WIDTH;
-                const availableWidth = containerWidth - pdfMinWidth - gapWidth - 1; // 1 for divider
-                setChatColumnWidth(prevChatWidth => Math.min(prevChatWidth + FIXED_MAJORS_WIDTH + gapWidth, availableWidth));
+                const dividerWidth = 1; // Width of the draggable divider
+
+                if (!nextVisible) {
+                    // --- HIDING MAJORS ---
+                    // Calculate available width when majors are hidden
+                    const availableWidthForChatAndPdf = containerWidth - pdfMinWidth - dividerWidth - gapWidth; // Space left for Chat + PDF Min + Gaps
+                    // Target width: current chat width + space freed by majors
+                    const targetChatWidth = chatColumnWidth + majorsColumnTotalWidth;
+                    // New width is the smaller of the target or the max available space
+                    const newChatWidth = Math.min(targetChatWidth, availableWidthForChatAndPdf);
+                    // Ensure it doesn't go below min width (shouldn't happen when increasing, but good practice)
+                    setChatColumnWidth(Math.max(newChatWidth, MIN_COL_WIDTH));
+                } else {
+                    // --- SHOWING MAJORS ---
+                    // Target width: current chat width - space needed for majors
+                    const targetChatWidth = chatColumnWidth - majorsColumnTotalWidth;
+                    // New width is the larger of the target or the minimum allowed chat width
+                    const newChatWidth = Math.max(targetChatWidth, MIN_COL_WIDTH);
+                    setChatColumnWidth(newChatWidth);
+                }
             }
             return nextVisible;
         });
@@ -82,8 +108,22 @@ function AgreementViewerPage({ user, userTier }) {
     const userName = user?.name || user?.email || "You";
     const mainContentHeight = `calc(90vh - 53px)`; // Assuming nav height + padding
 
-    // Determine images for chat
-    const currentSendingId = (activeTabIndex >= 0 ? agreementData[activeTabIndex]?.sendingId : null) || allSelectedSendingInstitutions[0]?.id;
+    // Determine current sending ID based on the first selected institution
+    // Memoize this as well, although less critical than the array
+    const currentSendingId = useMemo(() => allSelectedSendingInstitutions[0]?.id, [allSelectedSendingInstitutions]);
+
+    // Memoize the COMPLETE list of image filenames for ALL agreements
+    // This list should remain stable unless the underlying agreements change
+    const allAgreementImageFilenames = useMemo(() => {
+        if (!agreementData) return [];
+        // Flatten the arrays of images from all agreements in agreementData
+        // Adjust this logic based on the actual structure of agreementData
+        return Object.values(agreementData).flatMap(data => data?.images || []);
+    }, [agreementData]); // Depends only on the overall agreement data
+
+    // Memoize image filenames for the chat (use the complete list)
+    // This replaces the previous memoization of imagesForActivePdf for the chat
+    const memoizedImageFilenamesForChat = allAgreementImageFilenames; // Already memoized
 
 
     return (
@@ -132,15 +172,17 @@ function AgreementViewerPage({ user, userTier }) {
                     transition: 'margin-left 0.3s ease' // Smooth transition for margin
                 }}>
                     <ChatInterface
+                        // Pass the memoized COMPLETE list of filenames to useChat
+                        imageFilenames={memoizedImageFilenamesForChat}
                         selectedMajorName={selectedMajorName}
                         userName={userName}
                         isMajorsVisible={isMajorsVisible} // Pass visibility state
                         toggleMajorsVisibility={toggleMajorsVisibility} // Pass toggle function
-                        sendingInstitutionId={currentSendingId}
-                        allSendingInstitutionIds={allSelectedSendingInstitutions.map(inst => inst.id)}
+                        sendingInstitutionId={currentSendingId} // Pass memoized current ID
+                        allSendingInstitutionIds={memoizedAllSendingInstitutionIds} // Pass memoized ID array
                         receivingInstitutionId={receivingId}
                         academicYearId={yearId}
-                        user={user}
+                        user={user} // Assuming user object reference is stable from parent/context
                     />
                 </div>
 
@@ -174,11 +216,11 @@ function AgreementViewerPage({ user, userTier }) {
                         agreementData={agreementData}
                         activeTabIndex={activeTabIndex}
                         handleTabClick={handleTabClick}
-                        allSelectedSendingInstitutions={allSelectedSendingInstitutions}
+                        allSelectedSendingInstitutions={allSelectedSendingInstitutions} // Pass original object array here
                         yearId={yearId}
                     />
                     <PdfViewer
-                        imageFilenames={imagesForActivePdf}
+                        imageFilenames={imagesForActivePdf} // PDF viewer uses the direct state value
                         // Refined loading state check
                         error={pdfError} // Pass PDF viewer error
                         filename={currentPdfFilename}

@@ -181,3 +181,73 @@ def check_and_update_usage(user_data):
         # Add traceback here if it's not already in the calling function's handler
         traceback.print_exc()
         raise Exception(f"Failed to update usage count: {e}")
+
+# --- Helper Function for Intersection (Moved from college_transfer_API.py) ---
+def calculate_intersection(results):
+    """Calculates the intersection of values from multiple dictionary results."""
+    # Corrected syntax: Use Python's 'any' and 'is None'
+    if not results or any(res is None for res in results):
+        return {}
+
+    # Filter out any potentially empty results before processing
+    valid_results = [res for res in results if isinstance(res, dict) and res]
+
+    if not valid_results:
+        return {} # No valid data to intersect
+
+    # Get IDs (values) from the first valid result as the starting point
+    try:
+        # Ensure values are hashable (like strings or ints) before adding to set
+        common_ids = set(str(v) for v in valid_results[0].values())
+    except Exception as e:
+        print(f"Error processing first result for intersection: {e}")
+        return {} # First result wasn't as expected
+
+    # Intersect with IDs (values) from subsequent valid results
+    for i in range(1, len(valid_results)):
+        try:
+            current_ids = set(str(v) for v in valid_results[i].values())
+            common_ids.intersection_update(current_ids) # More efficient intersection
+        except Exception as e:
+            print(f"Error processing result {i} for intersection: {e}")
+            continue # Skip if a result is malformed
+
+    print(f"Common IDs after intersection: {common_ids}")
+
+    # Rebuild the result object using common IDs
+    intersection = {}
+    # Use the first valid result to map IDs back to names (keys)
+    name_map_source = valid_results[0]
+    # Create a reverse map (id -> name) for efficiency
+    try:
+        # Ensure values are hashable before creating the reverse map
+        id_to_name_map = {str(v): k for k, v in name_map_source.items()}
+    except Exception as e:
+        print(f"Error creating reverse map for intersection: {e}")
+        id_to_name_map = {} # Handle potential errors if source isn't dict
+
+    for common_id in common_ids:
+        # common_id is already a string from the set creation
+        name = id_to_name_map.get(common_id)
+        if name:
+            # Find the original ID type if needed, assuming it matches the source value type
+            original_id = next((v for v in name_map_source.values() if str(v) == common_id), common_id)
+            intersection[name] = original_id
+        else:
+            # Fallback: Search other results if name not in first one (less efficient)
+            print(f"Warning: Could not find name for common ID {common_id} in first source. Searching others...")
+            found = False
+            for res in valid_results:
+                 try:
+                    for k, v in res.items():
+                        if str(v) == common_id:
+                            intersection[k] = v # Use original key and value
+                            found = True
+                            break
+                 except Exception:
+                     continue # Skip malformed results
+                 if found: break # Found it in this result dict
+
+    print(f"Intersection result: {intersection}")
+    return intersection
+# --- End Helper Function ---

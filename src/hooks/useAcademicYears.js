@@ -1,66 +1,22 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { fetchData } from '../services/api';
 
-// Helper function to calculate intersection of academic years
-const calculateYearIntersection = (results) => {
-    if (!results || results.length === 0 || results.some(res => res === null || typeof res === 'undefined')) {
-        return {};
-    }
-
-    const validResults = results.filter(res => typeof res === 'object' && res !== null && Object.keys(res).length > 0);
-
-    if (validResults.length === 0) {
-        return {};
-    }
-
-    let commonIds = new Set(Object.values(validResults[0]));
-
-    for (let i = 1; i < validResults.length; i++) {
-        const currentIds = new Set(Object.values(validResults[i]));
-        commonIds = new Set([...commonIds].filter(id => currentIds.has(id)));
-    }
-
-    console.log("Common academic year IDs:", commonIds);
-
-    const intersection = {};
-    const nameMapSource = validResults[0];
-    const idToNameMap = Object.entries(nameMapSource).reduce((acc, [name, id]) => {
-        acc[id] = name;
-        return acc;
-    }, {});
-
-    commonIds.forEach(id => {
-        const name = idToNameMap[id];
-        if (name) {
-            intersection[name] = id;
-        } else {
-            console.warn(`Could not find name for common academic year ID: ${id}.`);
-             // Attempt fallback search in other results
-            for (const res of validResults) {
-                const foundEntry = Object.entries(res).find(([, resId]) => resId === id);
-                if (foundEntry) {
-                    intersection[foundEntry[0]] = id;
-                    break;
-                }
-            }
-        }
-    });
-
-    console.log("Intersection year result:", intersection);
-    return intersection;
-};
-
+const LOCAL_STORAGE_PREFIX = 'ctaCache_';
 
 export function useAcademicYears(selectedSendingInstitutions, selectedReceivingId) {
     const [academicYears, setAcademicYears] = useState({});
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState(null);
+    const cacheRef = useRef({}); // Simple in-memory cache
+
+    // Define senderIds and key outside useEffect
+    const senderIds = selectedSendingInstitutions.map(s => s.id);
+    const senderIdsString = senderIds.sort().join(',');
+    const contextKey = `${senderIdsString}_${selectedReceivingId}`; // Key for cache/localStorage
 
     useEffect(() => {
         let isMounted = true;
-        const senderIds = selectedSendingInstitutions.map(s => s.id);
 
-        // Only proceed if we have at least one sending institution AND a receiving institution selected
         if (senderIds.length === 0 || !selectedReceivingId) {
             setAcademicYears({});
             setIsLoading(false);
@@ -68,92 +24,77 @@ export function useAcademicYears(selectedSendingInstitutions, selectedReceivingI
             return; // Clear years if selections are incomplete
         }
 
-        const fetchAndIntersect = async () => {
+        const fetchCommonYears = async () => {
             if (!isMounted) return;
             setIsLoading(true);
             setError(null);
             setAcademicYears({}); // Clear previous results
 
-            // const cacheKeyBase = `academic-years-${selectedReceivingId}`;
-            // let combinedCacheKey = cacheKeyBase + '-' + senderIds.sort().join(','); // Create a consistent key for multiple senders - Not currently used for multi-sender caching
+            const localStorageKey = `${LOCAL_STORAGE_PREFIX}years_intersection_${contextKey}`;
+            const memoryCacheKey = `years_${contextKey}`;
 
+            // 1. Check In-Memory Cache
+            if (cacheRef.current[memoryCacheKey]) {
+                console.log(`In-memory cache hit for years intersection: ${contextKey}`);
+                setAcademicYears(cacheRef.current[memoryCacheKey]);
+                setIsLoading(false);
+                return;
+            }
+
+            // 2. Check localStorage
             try {
-                // --- Check Cache for the specific combination ---
-                // Note: Caching intersection results might be complex if senders change frequently.
-                // We'll cache individual results for single senders, but recalculate intersection for multiple.
-                if (senderIds.length === 1) {
-                    const singleCacheKey = `academic-years-${senderIds[0]}-${selectedReceivingId}`;
-                    try {
-                        const cachedData = localStorage.getItem(singleCacheKey);
-                        if (cachedData) {
-                            const parsedData = JSON.parse(cachedData);
-                            console.log("Loaded academic years from cache:", singleCacheKey);
-                            if (isMounted) {
-                                setAcademicYears(parsedData);
-                                setIsLoading(false);
-                            }
-                            return; // Exit early
-                        }
-                    } catch (e) {
-                        console.error("Error loading academic years from cache:", e);
-                        localStorage.removeItem(singleCacheKey);
-                    }
+                const cachedDataString = localStorage.getItem(localStorageKey);
+                if (cachedDataString) {
+                    console.log(`LocalStorage hit for years intersection (${localStorageKey})`);
+                    const cachedData = JSON.parse(cachedDataString);
+                    cacheRef.current[memoryCacheKey] = cachedData; // Update in-memory
+                    setAcademicYears(cachedData);
+                    setIsLoading(false);
+                    return;
                 }
+            } catch (e) {
+                console.error(`Error reading years intersection from localStorage (${localStorageKey}):`, e);
+                localStorage.removeItem(localStorageKey);
+            }
 
+            // 3. Fetch from API (Single Call)
+            console.log(`Cache miss for years intersection (${contextKey}). Fetching...`);
+            try {
+                // Pass comma-separated sending IDs and single receiving ID
+                const data = await fetchData(`academic-years?sendingId=${senderIdsString}&receivingId=${selectedReceivingId}`);
 
-                // --- Fetch from API ---
-                if (senderIds.length === 1) {
-                    const sendingId = senderIds[0];
-                    console.log(`Fetching years for single sender S=${sendingId}, R=${selectedReceivingId}`);
-                    const data = await fetchData(`academic-years?sendingId=${sendingId}&receivingId=${selectedReceivingId}`);
-                    if (!isMounted) return;
+                if (!isMounted) return;
 
-                    if (data && Object.keys(data).length > 0) {
-                        setAcademicYears(data);
-                        // Cache Result for single sender
-                        const singleCacheKey = `academic-years-${sendingId}-${selectedReceivingId}`;
-                        try {
-                            localStorage.setItem(singleCacheKey, JSON.stringify(data));
-                            console.log("Academic Years cached successfully:", singleCacheKey);
-                        } catch (e) {
-                            console.error("Error caching academic years:", e);
-                        }
-                    } else {
-                        setAcademicYears({});
-                        setError(`No academic years found for the selected combination.`);
-                    }
+                let finalData = {};
+                let warnings = null;
+
+                // Handle potential 207 Multi-Status response
+                if (data && data.years !== undefined) {
+                    finalData = data.years || {};
+                    warnings = data.warnings;
+                    if (warnings) console.warn("Partial fetch failure for academic years:", warnings);
                 } else {
-                    // --- Fetch for multiple senders and find intersection ---
-                    console.log(`Fetching years for multiple senders (Count: ${senderIds.length}), R=${selectedReceivingId}`);
-                    const promises = senderIds.map(id =>
-                        fetchData(`academic-years?sendingId=${id}&receivingId=${selectedReceivingId}`)
-                            .catch(err => {
-                                console.error(`Failed to fetch years for S=${id}, R=${selectedReceivingId}:`, err);
-                                return {}; // Return empty object on error
-                            })
-                    );
-
-                    const results = await Promise.all(promises);
-                    if (!isMounted) return;
-                    console.log("Raw year results from multiple fetches:", results);
-
-                    if (results.some(res => res === null || typeof res === 'undefined')) {
-                        throw new Error("One or more requests for academic years failed.");
-                    }
-
-                    const intersection = calculateYearIntersection(results);
-
-                    if (Object.keys(intersection).length > 0) {
-                        setAcademicYears(intersection);
-                    } else {
-                        setAcademicYears({});
-                        setError("No common academic years found for the selected combination of institutions.");
-                    }
+                    finalData = data || {}; // Assume direct object if not 207 structure
                 }
+
+                 if (Object.keys(finalData).length === 0 && !warnings) {
+                     setError("No common academic years found for the selected combination.");
+                 }
+
+                setAcademicYears(finalData);
+                cacheRef.current[memoryCacheKey] = finalData; // Store in memory
+
+                // Store in localStorage
+                try {
+                    localStorage.setItem(localStorageKey, JSON.stringify(finalData));
+                } catch (e) {
+                    console.error(`Error writing years intersection to localStorage (${localStorageKey}):`, e);
+                }
+
             } catch (err) {
-                console.error("Error processing academic years:", err);
+                console.error("Error fetching common academic years:", err);
                 if (isMounted) {
-                    setError(`Failed to load or process academic years: ${err.message}`);
+                    setError(`Failed to load common academic years: ${err.message}`);
                     setAcademicYears({}); // Clear on error
                 }
             } finally {
@@ -163,14 +104,14 @@ export function useAcademicYears(selectedSendingInstitutions, selectedReceivingI
             }
         };
 
-        fetchAndIntersect();
+        fetchCommonYears();
 
         return () => {
             isMounted = false; // Cleanup
         };
-    // Re-run when senders or receiver changes
+    // Depend on the sorted string of sender IDs and the receiver ID
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [JSON.stringify(selectedSendingInstitutions.map(s => s.id)), selectedReceivingId]);
+    }, [senderIdsString, selectedReceivingId]);
 
     return { academicYears, isLoading, error };
 }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'; // Add useEffect
+import React, { useState, useEffect, useCallback } from 'react'; // Add useCallback
 import { Routes, Route, useNavigate } from 'react-router-dom';
 import { GoogleLogin, googleLogout } from '@react-oauth/google';
 import { jwtDecode } from "jwt-decode";
@@ -16,7 +16,8 @@ const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY);
 // --- End Stripe Imports ---
 
 
-const USER_STORAGE_KEY = 'collegeTransferUser';
+// Make USER_STORAGE_KEY exportable or move to constants.js
+export const USER_STORAGE_KEY = 'collegeTransferUser';
 
 // --- Simple Payment Status Components ---
 const PaymentSuccess = () => {
@@ -84,13 +85,49 @@ function App() {
 
   const navigate = useNavigate();
 
-  // --- Fetch User Status/Tier ---
+  // --- Wrap handleLogout in useCallback ---
+  const handleLogout = useCallback(() => {
+    googleLogout(); // Clear Google session
+    setUser(null); // Clear React state
+    try {
+      localStorage.removeItem(USER_STORAGE_KEY);
+      console.log("Removed user from localStorage");
+    } catch (storageError) {
+      console.error("Failed to remove user from localStorage:", storageError);
+    }
+    console.log("User logged out.");
+    navigate('/'); // Navigate to home
+    setUserTier('free'); // Reset tier
+  }, [navigate]); // Add navigate as dependency
+
+  // --- Effect to handle automatic logout on token expiry ---
+  useEffect(() => {
+    const handleAuthExpired = () => {
+      // Avoid logging out if already logged out
+      if (localStorage.getItem(USER_STORAGE_KEY)) {
+          console.log("Auth expired event received. Logging out.");
+          alert("Your session has expired. Please sign in again."); // Inform user
+          handleLogout();
+      }
+    };
+
+    window.addEventListener('auth-expired', handleAuthExpired);
+
+    // Cleanup listener on component unmount
+    return () => {
+      window.removeEventListener('auth-expired', handleAuthExpired);
+    };
+  }, [handleLogout]); // Add handleLogout dependency
+  // --- End Auto Logout Effect ---
+
+
+  // --- Fetch User Status/Tier Effect ---
   useEffect(() => {
     // Function to fetch status
     const fetchUserStatus = () => {
         if (user && user.idToken) {
             setIsLoadingTier(true);
-            fetchData('user-status', {
+            fetchData('/user-status', {
                 headers: { 'Authorization': `Bearer ${user.idToken}` }
             })
             .then(data => {
@@ -171,24 +208,12 @@ function App() {
     setUserTier('free'); // Reset tier on login error
   };
 
-  const handleLogout = () => {
-    googleLogout(); // Clear Google session
-    setUser(null); // Clear React state
+  // --- Use useCallback version for manual logout button ---
+  const handleManualLogoutClick = useCallback(() => {
+      handleLogout();
+  }, [handleLogout]);
 
-    // Remove user data from localStorage
-    try {
-      localStorage.removeItem(USER_STORAGE_KEY);
-      console.log("Removed user from localStorage");
-    } catch (storageError) {
-      console.error("Failed to remove user from localStorage:", storageError);
-    }
 
-    console.log("User logged out");
-    navigate('/');
-    setUserTier('free'); // Reset tier on logout
-  };
-
-  // --- Handle Upgrade Click ---
   const handleUpgradeClick = async () => {
       if (!user || !user.idToken) {
           alert("Please log in to upgrade.");
@@ -271,7 +296,7 @@ function App() {
                   </button>
               )}
 
-              <button onClick={handleLogout} className="btn btn-danger">
+              <button onClick={handleManualLogoutClick} className="btn btn-danger"> {/* Use useCallback version */}
                 Logout
               </button>
             </>
