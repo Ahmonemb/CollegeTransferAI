@@ -21,6 +21,7 @@ export function useAgreementData(initialSendingId, receivingId, yearId, user, al
 
     // --- State for Multiple PDFs/Tabs ---
     const [agreementData, setAgreementData] = useState([]); // Will include IGETC if available
+    const [allAgreementsImageFilenamesState, setAllAgreementsImageFilenamesState] = useState([]); // <-- NEW/REINSTATED STATE
     const [activeTabIndex, setActiveTabIndex] = useState(0); // Start potentially at IGETC (index 0)
     const [imagesForActivePdf, setImagesForActivePdf] = useState([]);
 
@@ -197,7 +198,7 @@ export function useAgreementData(initialSendingId, receivingId, yearId, user, al
         if (!majorKey || allSelectedSendingInstitutions.length === 0 || !receivingId || !yearId) {
              console.warn("Skipping agreement fetch: Missing major key or context.");
              setAgreementData([]);
-             // setAllAgreementsImageFilenames([]); // Removed state
+             setAllAgreementsImageFilenamesState([]); // <-- Reset this new state
              setImagesForActivePdf([]);
              setActiveTabIndex(0);
              setPdfError("Select a major/department and ensure all institutions/year are set.");
@@ -209,9 +210,8 @@ export function useAgreementData(initialSendingId, receivingId, yearId, user, al
         setIsLoadingPdf(true); // START loading indicator for the entire process
         setPdfError(null);
         setAgreementData([]); // Clear previous agreements
-        // setAllAgreementsImageFilenames([]); // Removed state
+        setAllAgreementsImageFilenamesState([]); // <-- Reset this new state
         setImagesForActivePdf([]); // Clear viewer
-        setActiveTabIndex(0); // Reset tab index temporarily
 
         // Determine the sending ID to use for the IGETC check (prefer initial, fallback to first selected)
         const contextSendingId = initialSendingId || allSelectedSendingInstitutions[0]?.id;
@@ -279,6 +279,7 @@ export function useAgreementData(initialSendingId, receivingId, yearId, user, al
                 setPdfError("No agreements found for this major/department.");
                 // No need to fetch images if no agreements
                 setIsLoadingPdf(false); // STOP loading
+                setAllAgreementsImageFilenamesState([]); // <-- Ensure reset
                 return;
             }
 
@@ -314,6 +315,18 @@ export function useAgreementData(initialSendingId, receivingId, yearId, user, al
             await Promise.allSettled(imageFetchPromises);
             console.log("All image fetch attempts completed.");
 
+            // ----> DERIVE AND SET THE NEW STATE HERE <----
+            const newAllFilenames = combinedAgreements.reduce((acc, agreement) => {
+                if (agreement.pdfFilename && imageCacheRef.current[agreement.pdfFilename]) {
+                    acc.push(...imageCacheRef.current[agreement.pdfFilename]);
+                }
+                return acc;
+            }, []);
+            const uniqueFilenames = [...new Set(newAllFilenames)];
+            setAllAgreementsImageFilenamesState(uniqueFilenames); // <-- UPDATE THE STATE
+            console.log("Derived and set allAgreementsImageFilenamesState:", uniqueFilenames);
+            // ----> END DERIVATION <----
+
             // 5. Determine initial active tab index (first non-IGETC, or 0 if only IGETC/none)
             const firstRealAgreementIndex = combinedAgreements.findIndex(a => !a.isIgetc);
             initialActiveIndex = firstRealAgreementIndex !== -1 ? firstRealAgreementIndex : 0;
@@ -330,6 +343,7 @@ export function useAgreementData(initialSendingId, receivingId, yearId, user, al
             // setAllAgreementsImageFilenames([]); // Removed state
             setImagesForActivePdf([]);
             setActiveTabIndex(0); // Reset index
+            setAllAgreementsImageFilenamesState([]); // <-- Reset on error
         } finally {
             // Loading stops AFTER all fetches (agreements + images) are attempted and initial tab is set.
             // The useEffect watching activeTabIndex will then display the images for that tab from the cache.
@@ -420,6 +434,7 @@ export function useAgreementData(initialSendingId, receivingId, yearId, user, al
         setMajors({});
         setError(null);
         setIsLoadingMajors(true); // Will be set correctly by fetch/cache logic
+        setAllAgreementsImageFilenamesState([]); // <-- Reset
 
     }, [initialSendingId, receivingId, yearId]);
 
@@ -497,6 +512,7 @@ export function useAgreementData(initialSendingId, receivingId, yearId, user, al
         hasDepartmentsAvailable,
         isLoadingAvailability,
         agreementData, // Includes IGETC + Major agreements
+        allAgreementsImageFilenames: allAgreementsImageFilenamesState, // <-- EXPOSE THE NEW STATE
         activeTabIndex,
         imagesForActivePdf, // Images for the currently selected tab
 

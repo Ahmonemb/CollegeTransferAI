@@ -33,7 +33,9 @@ export function useChat(
     // Effect to send initial analysis request
     useEffect(() => {
         console.log("DEBUG: Initial analysis effect triggered.");
-        console.log("DEBUG: User:", user ? `Logged in (ID: ${user.uid})` : "Not logged in");
+        console.log("DEBUG: User object:", user);
+        console.log("DEBUG: User ID:", user ? user.id : "N/A");
+        console.log("DEBUG: User ID Token:", user ? (user.idToken ? "Present" : "MISSING") : "N/A");
         // Use the stable list of all image filenames passed in
         console.log("DEBUG: imageFilenames (for initial analysis):", imageFilenames);
         console.log("DEBUG: initialAnalysisSentRef.current:", initialAnalysisSentRef.current);
@@ -51,7 +53,7 @@ export function useChat(
 
         // --- Temporarily disabled initial analysis sending ---
         // if (shouldSend) {
-        if (shouldSend) { 
+        if (shouldSend && false) { // Set to false to disable sending for now
         // --- End temporary disable ---
             const sendInitialAnalysis = async () => {
                 // Double-check user and token right before sending

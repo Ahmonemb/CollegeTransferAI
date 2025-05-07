@@ -62,6 +62,7 @@ function AgreementViewerPage({ user, userTier }) {
         hasMajorsAvailable, hasDepartmentsAvailable, isLoadingAvailability,
         agreementData, activeTabIndex, imagesForActivePdf,
         currentPdfFilename, filteredMajors,
+        allAgreementsImageFilenames, // <-- This now comes directly from useAgreementData's state
 
         // Handlers & Setters
         handleMajorSelect, handleCategoryChange, handleTabClick, setMajorSearchTerm,
@@ -112,18 +113,15 @@ function AgreementViewerPage({ user, userTier }) {
     // Memoize this as well, although less critical than the array
     const currentSendingId = useMemo(() => allSelectedSendingInstitutions[0]?.id, [allSelectedSendingInstitutions]);
 
-    // Memoize the COMPLETE list of image filenames for ALL agreements
-    // This list should remain stable unless the underlying agreements change
-    const allAgreementImageFilenames = useMemo(() => {
-        if (!agreementData) return [];
-        // Flatten the arrays of images from all agreements in agreementData
-        // Adjust this logic based on the actual structure of agreementData
-        return Object.values(agreementData).flatMap(data => data?.images || []);
-    }, [agreementData]); // Depends only on the overall agreement data
+    // Use the state from the hook directly and memoize it
+    const memoizedImageFilenamesForChat = useMemo(() => {
+        return allAgreementsImageFilenames || []; // Default to [] if it's somehow undefined initially
+    }, [allAgreementsImageFilenames]);
 
-    // Memoize image filenames for the chat (use the complete list)
-    // This replaces the previous memoization of imagesForActivePdf for the chat
-    const memoizedImageFilenamesForChat = allAgreementImageFilenames; // Already memoized
+    // Log to see when it updates
+    useEffect(() => {
+        console.log("AgreementViewerPage: memoizedImageFilenamesForChat updated:", memoizedImageFilenamesForChat);
+    }, [memoizedImageFilenamesForChat]);
 
 
     return (
