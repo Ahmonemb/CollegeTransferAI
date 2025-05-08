@@ -4,7 +4,7 @@ function MajorsList({
     isMajorsVisible,
     toggleMajorsVisibility,
     selectedCategory,
-    handleCategoryChange, // Pass the handler
+    handleCategoryChange, 
     majorSearchTerm,
     setMajorSearchTerm,
     filteredMajors,
@@ -16,18 +16,18 @@ function MajorsList({
     isLoadingAvailability,
     selectedMajorKey,
     isLoadingPdf,
-    majors // Pass raw majors for checking length
+    majors 
 }) {
     if (!isMajorsVisible) return null;
 
     return (
         <div style={{
-            flex: `0 0 300px`, // Use fixed width directly
+            flex: `0 0 300px`, 
             display: 'flex',
             flexDirection: 'column',
-            minWidth: '150px', // Keep minWidth
+            minWidth: '150px', 
             overflow: 'hidden',
-            transition: 'flex-basis 0.3s ease, min-width 0.3s ease', // flex-basis might not be needed if fixed
+            transition: 'flex-basis 0.3s ease, min-width 0.3s ease', 
             marginRight: '1em',
             position: 'relative',
             paddingTop: '2.5em'

@@ -2,7 +2,7 @@ import React from 'react';
 
 function UsageStatusDisplay({ user, usageStatus, countdown }) {
     if (!user || (usageStatus.usageLimit === null && !usageStatus.error)) {
-        return null; // Don't display if not logged in or status not loaded (and no error)
+        return null; 
     }
 
     return (

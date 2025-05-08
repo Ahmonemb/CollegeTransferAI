@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
-import { fetchData } from '../services/api'; // Assuming api.js is in services
+import { fetchData } from '../services/api'; 
 
-// Helper function (can be moved to a utils file)
 function formatRemainingTime(resetTimestamp) {
     if (!resetTimestamp) return '';
     const now = new Date();
@@ -27,7 +26,6 @@ export function useUsageStatus(user, userTier) {
     });
     const [countdown, setCountdown] = useState('');
 
-    // Fetch User Usage Status
     useEffect(() => {
         setUsageStatus(prev => ({ ...prev, tier: userTier }));
 
@@ -38,14 +36,13 @@ export function useUsageStatus(user, userTier) {
 
         const fetchStatus = async () => {
             try {
-                const status = await fetchData('/user-status', { // This path is likely correct if fetchData adds /api
+                const status = await fetchData('/user-status', { 
                     headers: { 'Authorization': `Bearer ${user.idToken}` }
                 });
-                // --- Use the correct keys from the backend response ---
                 setUsageStatus({
-                    usageCount: status.usageCount, // Use camelCase
-                    usageLimit: status.usageLimit, // Use camelCase
-                    resetTime: status.resetTime,   // Use camelCase
+                    usageCount: status.usageCount, 
+                    usageLimit: status.usageLimit, 
+                    resetTime: status.resetTime,   
                     tier: status.tier,
                     error: null,
                 });
@@ -58,7 +55,6 @@ export function useUsageStatus(user, userTier) {
         fetchStatus();
     }, [user, userTier]);
 
-    // Countdown Timer Logic
     useEffect(() => {
         if (!usageStatus.resetTime) {
             setCountdown('');
@@ -77,7 +73,6 @@ export function useUsageStatus(user, userTier) {
             setCountdown(remaining);
             if (remaining === 'Usage reset') {
                 clearInterval(intervalId);
-                // Optionally refetch usage status after reset
             }
         }, 1000);
 

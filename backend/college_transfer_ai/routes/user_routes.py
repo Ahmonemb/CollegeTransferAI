@@ -2,14 +2,13 @@ from flask import Blueprint, jsonify, request, current_app
 from datetime import datetime, timedelta, time, timezone
 import traceback
 
-# Import necessary functions/objects from other modules
 from ..utils import verify_google_token, get_or_create_user, FREE_TIER_LIMIT, PREMIUM_TIER_LIMIT
 
 user_bp = Blueprint('user_bp', __name__)
 
 @user_bp.route('/user-status', methods=['GET'])
 def get_user_status():
-    print("--- !!! GET /api/user-status endpoint hit !!! ---") # Add this line
+    print("--- !!! GET /api/user-status endpoint hit !!! ---") 
     config = current_app.config['APP_CONFIG']
     GOOGLE_CLIENT_ID = config.get('GOOGLE_CLIENT_ID')
     if not GOOGLE_CLIENT_ID:
@@ -29,26 +28,24 @@ def get_user_status():
         requests_used = user_data.get('requests_used_this_period', 0)
         period_start = user_data.get('period_start_date')
 
-        now = datetime.now(timezone.utc) # Use timezone-aware
+        now = datetime.now(timezone.utc) 
         reset_time_iso = None
 
-        # Calculate reset time (assuming daily reset at UTC midnight)
         try:
             tomorrow = now.date() + timedelta(days=1)
             tomorrow_midnight_utc = datetime.combine(tomorrow, time(0, 0), tzinfo=timezone.utc)
-            reset_time_iso = tomorrow_midnight_utc.isoformat(timespec='seconds') # Use ISO format with seconds
+            reset_time_iso = tomorrow_midnight_utc.isoformat(timespec='seconds') 
         except Exception as time_err:
             print(f"Error calculating reset time: {time_err}")
             reset_time_iso = "Error calculating reset time"
 
 
-        # Check if usage needs reset for display purposes (doesn't update DB here)
         display_requests_used = requests_used
         if period_start and isinstance(period_start, datetime):
              if period_start.tzinfo is None:
                  period_start = period_start.replace(tzinfo=timezone.utc)
              if period_start.date() < now.date():
-                 display_requests_used = 0 # Display as 0 if period has reset
+                 display_requests_used = 0 
 
         print(f"User status requested for {user_data.get('google_user_id')}: Used={display_requests_used}, Limit={limit}, Tier={tier}, Resets={reset_time_iso}")
 
@@ -56,7 +53,7 @@ def get_user_status():
             "tier": tier,
             "usageCount": display_requests_used,
             "usageLimit": limit,
-            "resetTime": reset_time_iso # ISO 8601 format string (UTC)
+            "resetTime": reset_time_iso 
         }), 200
 
     except ValueError as auth_err:

@@ -5,7 +5,7 @@ export function useResizeHandler(initialWidth, minColWidth, fixedMajorsWidth, is
     const isResizingRef = useRef(false);
     const dividerRef = useRef(null);
     const containerRef = useRef(null);
-    const dividerWidth = 1; // Assuming divider width is 1px
+    const dividerWidth = 1;
 
     const handleMouseMove = useCallback((e) => {
         if (!isResizingRef.current || !containerRef.current) {
@@ -16,25 +16,17 @@ export function useResizeHandler(initialWidth, minColWidth, fixedMajorsWidth, is
         const mouseX = e.clientX;
         const containerLeft = containerRect.left;
         const totalWidth = containerRect.width;
-        const gapWidth = 16; // Assuming 1em = 16px gap
-
-        // Read the *current* visibility from the ref
+        const gapWidth = 16;
         const currentVisibility = isMajorsVisibleRef.current;
-
-        // Calculate the starting position of the chat column
         const majorsEffectiveWidth = currentVisibility ? fixedMajorsWidth : 0;
         const gap1EffectiveWidth = currentVisibility ? gapWidth : 0;
         const chatStartOffset = majorsEffectiveWidth + gap1EffectiveWidth;
-
-        // Calculate desired chat width based on mouse position relative to chat start
         let newChatWidth = mouseX - containerLeft - chatStartOffset;
-
-        // Constraints: ensure chat and PDF columns have minimum width
         const maxChatWidth = totalWidth - chatStartOffset - minColWidth - gapWidth - dividerWidth;
         newChatWidth = Math.max(minColWidth, Math.min(newChatWidth, maxChatWidth));
 
         setChatColumnWidth(newChatWidth);
-    }, [minColWidth, fixedMajorsWidth, isMajorsVisibleRef]); // Dependencies updated
+    }, [minColWidth, fixedMajorsWidth, isMajorsVisibleRef]);
 
     const handleMouseUp = useCallback(() => {
         if (isResizingRef.current) {
@@ -44,10 +36,9 @@ export function useResizeHandler(initialWidth, minColWidth, fixedMajorsWidth, is
             document.body.style.cursor = '';
             document.body.style.userSelect = '';
         }
-    }, [handleMouseMove]); // Dependency on handleMouseMove
+    }, [handleMouseMove]);
 
     useEffect(() => {
-        // Cleanup function to remove listeners if component unmounts while resizing
         return () => {
             if (isResizingRef.current) {
                 window.removeEventListener('mousemove', handleMouseMove);
@@ -67,7 +58,7 @@ export function useResizeHandler(initialWidth, minColWidth, fixedMajorsWidth, is
 
     return {
         chatColumnWidth,
-        setChatColumnWidth, // Expose setter if needed externally
+        setChatColumnWidth,
         dividerRef,
         containerRef,
         handleMouseDown,

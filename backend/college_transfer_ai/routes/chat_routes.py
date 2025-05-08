@@ -1,21 +1,17 @@
-# filepath: backend/college_transfer_ai/routes/chat_routes.py
 import traceback
 import requests
 import json
 from flask import Blueprint, jsonify, request, current_app
 from datetime import datetime, timedelta, time, timezone
 
-# --- Google AI Imports ---
 import google.generativeai as genai
-# Try importing FunctionResponse from content_types
 from google.generativeai.types import HarmCategory, HarmBlockThreshold, Tool, FunctionDeclaration
-from google.generativeai.types import content_types # Import the module
-# --- End Google AI Imports ---
+from google.generativeai.types import content_types 
 
 from ..utils import verify_google_token, get_or_create_user, check_and_update_usage
-from ..database import get_gridfs, get_db # Import necessary accessors
+from ..database import get_gridfs, get_db 
 
-chat_bp = Blueprint('chat_bp', __name__) # Removed url_prefix, assuming added during registration
+chat_bp = Blueprint('chat_bp', __name__) 
 
 FREE_TIER_LIMIT = 10
 PREMIUM_TIER_LIMIT = 50
@@ -23,7 +19,6 @@ PREMIUM_TIER_LIMIT = 50
 gemini_model = None
 perplexity_api_key = None
 
-# --- Define the Web Search Tool for Gemini ---
 search_web_func = FunctionDeclaration(
     name="search_web",
     description="Search the web specifically for course prerequisite information. Use this tool when generating an educational plan to find prerequisites for a given course at a specific institution. If a prerequisite course is found, use this tool again to find *its* prerequisites, continuing recursively until no further prerequisites are found or a reasonable depth is reached (e.g., 2-3 levels deep). Only use this for finding prerequisite chains.",
@@ -39,37 +34,29 @@ search_web_func = FunctionDeclaration(
     }
 )
 search_tool = Tool(function_declarations=[search_web_func])
-# --- End Tool Definition ---
 
 def init_chat_routes(app):
-    """Initialize Gemini model, Perplexity key, and GridFS for chat routes."""
     global gemini_model, perplexity_api_key
 
-    config = app.config['APP_CONFIG'] # Access config directly from the passed 'app' object
+    config = app.config['APP_CONFIG'] 
     google_api_key = config.get('GOOGLE_API_KEY')
-    perplexity_api_key = config.get('PERPLEXITY_API_KEY') # Load Perplexity key
+    perplexity_api_key = config.get('PERPLEXITY_API_KEY') 
 
-    # --- Add app context specifically for DB/GridFS access during init ---
     try:
-        with app.app_context(): # Push context for the 'get_gridfs' call
-            fs_instance = get_gridfs() # Use the accessor function
+        with app.app_context(): 
+            fs_instance = get_gridfs() 
             if fs_instance:
                 print("--- GridFS accessed successfully in init_chat_routes (within context) ---")
-                # Use fs_instance here if needed during init
             else:
-                # This path shouldn't be hit if init_db runs first and succeeds
                 print("!!! WARNING: get_gridfs() returned None in init_chat_routes.")
     except Exception as e:
         print(f"Error during chat routes initialization related to DB/GridFS: {e}")
-        # Handle error appropriately
-    # --- End app context block ---
 
     if not google_api_key:
         print("Warning: GOOGLE_API_KEY not set. Gemini features will be disabled.")
-        return # Exit initialization if key is missing
+        return 
     if not perplexity_api_key:
         print("Warning: PERPLEXITY_API_KEY not set. Web search tool will be disabled.")
-        # Continue initialization even if Perplexity key is missing
 
     try:
         genai.configure(api_key=google_api_key)
@@ -82,12 +69,9 @@ def init_chat_routes(app):
     except Exception as e:
         print(f"!!! Gemini Initialization Error: {e}")
         gemini_model = None
-        # Decide if you want to clear perplexity_api_key here too
 
 
-# --- Helper Function for Perplexity API ---
 def call_perplexity_api(query: str) -> dict:
-    """Calls the Perplexity API with a search query."""
     if not perplexity_api_key:
         print("Error: Perplexity API key not configured.")
         return {"error": "Web search tool not configured."}
@@ -133,10 +117,8 @@ def call_perplexity_api(query: str) -> dict:
         return {"error": "An unexpected error occurred during web search."}
 
 
-# --- Chat Endpoint ---
 @chat_bp.route('/chat', methods=['POST'])
 def chat_endpoint():
-    # Inside the request handler, it's safe to use get_gridfs() which uses 'g'
     fs_request = get_gridfs()
     if fs_request is None:
          print("Error: GridFS not available for this request.")
@@ -147,13 +129,11 @@ def chat_endpoint():
 
     if not GOOGLE_CLIENT_ID:
          print("Error: GOOGLE_CLIENT_ID not configured.")
-         return jsonify({"error": "Server configuration error"}), 500 # Return error
+         return jsonify({"error": "Server configuration error"}), 500 
     if not gemini_model:
          print("Error: Gemini model not initialized.")
-         return jsonify({"error": "Chat service unavailable"}), 500 # Return error
-    # Removed the fs check here, using fs_request obtained via get_gridfs()
+         return jsonify({"error": "Chat service unavailable"}), 500 
 
-    # 1. Authentication & Authorization
     try:
         auth_header = request.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
@@ -162,7 +142,6 @@ def chat_endpoint():
         user_info = verify_google_token(token, GOOGLE_CLIENT_ID)
         user_data = get_or_create_user(user_info)
 
-        # 2. Rate Limiting / Usage Check
         if not check_and_update_usage(user_data):
             now = datetime.now(timezone.utc)
             tomorrow = now.date() + timedelta(days=1)
@@ -180,7 +159,6 @@ def chat_endpoint():
         traceback.print_exc()
         return jsonify({"error": "Could not verify usage limits."}), 500
 
-    # 3. Process Request Data
     data = request.get_json()
     if not data or 'new_message' not in data:
         return jsonify({"error": "Missing 'new_message' in request body"}), 400
@@ -189,7 +167,6 @@ def chat_endpoint():
     history = data.get('history', [])
     image_filenames = data.get('image_filenames', [])
 
-    # 4. Prepare Content for Gemini
     prompt_parts = []
     if image_filenames:
         print(f"Processing {len(image_filenames)} images for chat...")
@@ -207,7 +184,6 @@ def chat_endpoint():
 
     prompt_parts.append(new_message_text)
 
-    # 5. Call Gemini API (with Tool Handling)
     try:
         print("Sending initial request to Gemini...")
         api_history = []
@@ -228,7 +204,6 @@ def chat_endpoint():
             }
         )
 
-        # --- Tool Handling Loop ---
         while response.candidates and response.candidates[0].content.parts and isinstance(response.candidates[0].content.parts[0], genai.types.FunctionCall):
             function_call = response.candidates[0].content.parts[0].function_call
             print(f"--- Gemini requested Function Call: {function_call.name} ---")
@@ -237,35 +212,29 @@ def chat_endpoint():
                 query = function_call.args.get("query")
                 if not query:
                     print("Error: Gemini function call 'search_web' missing 'query' argument.")
-                    # Use the imported module to access FunctionResponse
                     function_response_part = content_types.FunctionResponse(
                         name="search_web",
                         response={"error": "Missing 'query' argument in function call."}
                     )
                 else:
                     search_results = call_perplexity_api(query)
-                    # Use the imported module to access FunctionResponse
                     function_response_part = content_types.FunctionResponse(
                         name="search_web",
                         response=search_results
                     )
 
                 print(f"--- Sending Function Response back to Gemini for {function_call.name} ---")
-                # Pass the FunctionResponse object directly
                 response = chat_session.send_message(content_types.to_content(function_response_part), stream=False)
 
 
             else:
                 print(f"Error: Unknown function call requested by Gemini: {function_call.name}")
-                 # Use the imported module to access FunctionResponse
                 function_response_part = content_types.FunctionResponse(
                     name=function_call.name,
                     response={"error": f"Function '{function_call.name}' is not implemented."}
                 )
-                # Pass the FunctionResponse object directly
                 response = chat_session.send_message(content_types.to_content(function_response_part), stream=False)
 
-        # --- Process Final Response ---
         if not response.candidates or not response.candidates[0].content.parts:
              print("Gemini response blocked or empty after processing. Feedback:", response.prompt_feedback if hasattr(response, 'prompt_feedback') else "N/A")
              try:

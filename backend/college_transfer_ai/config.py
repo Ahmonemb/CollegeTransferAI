@@ -1,37 +1,50 @@
 import os
-from dotenv import load_dotenv
+import json
+import traceback
 
 def load_configuration():
-    """Loads environment variables and returns them in a dictionary."""
-    # Assuming .env is at the project root (two levels up from this file's directory)
-    dotenv_path = os.path.join(os.path.dirname(__file__), '..', '..', '.env')
-    load_dotenv(dotenv_path=dotenv_path)
+    env = os.getenv('FLASK_ENV', 'development')
+    config_filename = f"config.{env}.json"
+    print(f"--- Loading configuration for environment: {env} from {config_filename} ---")
 
-    config = {
+    config = {}
+    try:
+        with open(config_filename, 'r') as f:
+            config = json.load(f)
+        print("--- Configuration loaded successfully from JSON file ---")
+    except FileNotFoundError:
+        print(f"!!! WARNING: {config_filename} not found. Attempting to load from environment variables.")
+    except json.JSONDecodeError as e:
+        print(f"!!! ERROR: Failed to parse {config_filename}: {e}. Attempting to load from environment variables.")
+        traceback.print_exc()
+
+    env_vars = {
         "MONGO_URI": os.getenv("MONGO_URI"),
-        "GOOGLE_CLIENT_ID": os.getenv("GOOGLE_CLIENT_ID"),
-        "GOOGLE_API_KEY": os.getenv("GOOGLE_API_KEY"), # For Gemini if needed
-        "PERPLEXITY_API_KEY": os.getenv("PERPLEXITY_API_KEY"),
+        "ASSIST_API_KEY": os.getenv("ASSIST_API_KEY"),
+        "GEMINI_API_KEY": os.getenv("GEMINI_API_KEY"),
+        "FRONTEND_URL": os.getenv("FRONTEND_URL"),
         "STRIPE_SECRET_KEY": os.getenv("STRIPE_SECRET_KEY"),
-        "STRIPE_PRICE_ID": os.getenv("STRIPE_PRICE_ID"),
+        "STRIPE_PUBLISHABLE_KEY": os.getenv("STRIPE_PUBLISHABLE_KEY"),
         "STRIPE_WEBHOOK_SECRET": os.getenv("STRIPE_WEBHOOK_SECRET"),
-        "FRONTEND_URL": os.getenv("FRONTEND_URL", "http://localhost:5173"),
-        # Add other config variables as needed
+        "GOOGLE_CLIENT_ID": os.getenv("GOOGLE_CLIENT_ID")
     }
-    # Basic validation
-    if not config["MONGO_URI"]:
-        raise ValueError("MONGO_URI not set in environment variables.")
-    if not config["GOOGLE_CLIENT_ID"]:
-        raise ValueError("GOOGLE_CLIENT_ID not set in environment variables.")
-    # Add more checks as needed
 
-    print("--- Configuration Loaded ---")
-    # Print loaded values for debugging (consider removing sensitive keys in production logs)
-    # print(f"MONGO_URI: {'Set' if config['MONGO_URI'] else 'Not Set'}")
-    # print(f"GOOGLE_CLIENT_ID: {'Set' if config['GOOGLE_CLIENT_ID'] else 'Not Set'}")
-    # print(f"STRIPE_SECRET_KEY: {'Set' if config['STRIPE_SECRET_KEY'] else 'Not Set'}")
-    # print(f"STRIPE_WEBHOOK_SECRET: {'Set' if config['STRIPE_WEBHOOK_SECRET'] else 'Not Set'}")
-    # print(f"FRONTEND_URL: {config['FRONTEND_URL']}")
+    loaded_from_env = False
+    for key, value in env_vars.items():
+        if value is not None:
+            config[key] = value
+            if not loaded_from_env:
+                print("--- Loading/Overriding configuration from environment variables ---")
+                loaded_from_env = True
+            print(f"    Loaded {key} from environment.")
+
+    required_keys = ["MONGO_URI", "ASSIST_API_KEY", "GEMINI_API_KEY", "FRONTEND_URL", "STRIPE_SECRET_KEY", "GOOGLE_CLIENT_ID"]
+    missing_keys = [key for key in required_keys if not config.get(key)]
+
+    if missing_keys:
+        error_message = f"Missing required configuration keys: {', '.join(missing_keys)}"
+        print(f"!!! CRITICAL: {error_message}")
+        raise ValueError(error_message)
+
+    print("--- Final configuration loaded ---")
     return config
-
-# config = load_configuration() # Optionally load here if needed globally at import time

@@ -2,11 +2,10 @@ import uuid
 import traceback
 from flask import Blueprint, jsonify, request, current_app
 from bson.objectid import ObjectId
-from datetime import datetime, timezone # Import timezone
+from datetime import datetime, timezone
 
-# Import necessary functions/objects from other modules
-from ..utils import verify_google_token, get_or_create_user # Removed check_and_update_usage if not used here
-from ..database import get_course_maps_collection # Use getter
+from ..utils import verify_google_token, get_or_create_user
+from ..database import get_course_maps_collection
 
 course_map_bp = Blueprint('course_map_bp', __name__)
 
@@ -17,50 +16,42 @@ def save_course_map():
     if not GOOGLE_CLIENT_ID:
          return jsonify({"error": "Google Client ID not configured."}), 500
 
-    course_maps_collection = get_course_maps_collection() # Get collection
+    course_maps_collection = get_course_maps_collection()
 
-    # 1. Authentication
     try:
         auth_header = request.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
             return jsonify({"error": "Authorization token missing or invalid"}), 401
         token = auth_header.split(' ')[1]
         user_info = verify_google_token(token, GOOGLE_CLIENT_ID)
-        user_data = get_or_create_user(user_info) # Ensure user exists
+        user_data = get_or_create_user(user_info)
         google_user_id = user_data['google_user_id']
-
-        # 2. Rate Limiting (Optional - decide if saving maps counts towards usage)
-        # Consider if saving maps should be rate-limited. If so, uncomment below.
-        # if not check_and_update_usage(user_data):
-        #     return jsonify({"error": "Usage limit exceeded"}), 429
 
     except ValueError as auth_err:
         return jsonify({"error": str(auth_err)}), 401
-    except Exception as usage_err: # Catch general exceptions from get_or_create_user too
+    except Exception as usage_err:
         print(f"Error during auth/user check for saving map: {usage_err}")
         traceback.print_exc()
         return jsonify({"error": "Could not verify user or usage limits."}), 500
 
-    # 3. Get Map Data
     data = request.get_json()
     nodes = data.get('nodes')
     edges = data.get('edges')
-    map_name = data.get('name', 'Untitled Course Map') # Default name
+    map_name = data.get('name', 'Untitled Course Map')
 
     if nodes is None or edges is None:
         return jsonify({"error": "Missing 'nodes' or 'edges' in request body"}), 400
 
-    # 4. Save to Database
     try:
-        map_id = str(uuid.uuid4()) # Generate a unique ID for the map
+        map_id = str(uuid.uuid4())
         map_document = {
-            "_id": map_id, # Use the generated UUID as the primary key
+            "_id": map_id,
             "google_user_id": google_user_id,
             "name": map_name,
             "nodes": nodes,
             "edges": edges,
-            "created_at": datetime.now(timezone.utc), # Use timezone-aware
-            "updated_at": datetime.now(timezone.utc)  # Use timezone-aware
+            "created_at": datetime.now(timezone.utc),
+            "updated_at": datetime.now(timezone.utc)
         }
         course_maps_collection.insert_one(map_document)
         print(f"Course map '{map_name}' ({map_id}) saved for user {google_user_id}")
@@ -78,9 +69,7 @@ def get_user_course_maps():
     if not GOOGLE_CLIENT_ID:
          return jsonify({"error": "Google Client ID not configured."}), 500
 
-    course_maps_collection = get_course_maps_collection() # Get collection
-
-    # 1. Authentication
+    course_maps_collection = get_course_maps_collection()
     try:
         auth_header = request.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
@@ -96,15 +85,11 @@ def get_user_course_maps():
         traceback.print_exc()
         return jsonify({"error": "Authentication failed."}), 500
 
-    # 2. Fetch Maps from Database
     try:
-        # Find maps by google_user_id, exclude nodes/edges, sort by updated_at descending
         user_maps = list(course_maps_collection.find(
             {"google_user_id": google_user_id},
-            {"nodes": 0, "edges": 0} # Exclude nodes/edges from the list view
-        ).sort("updated_at", -1)) # Sort by most recently updated
-
-        # _id is already a string UUID, no conversion needed
+            {"nodes": 0, "edges": 0}
+        ).sort("updated_at", -1))
 
         print(f"Found {len(user_maps)} course maps for user {google_user_id}")
         return jsonify(user_maps), 200
@@ -114,7 +99,6 @@ def get_user_course_maps():
         traceback.print_exc()
         return jsonify({"error": "Failed to fetch course maps"}), 500
 
-
 @course_map_bp.route('/course-map/<map_id>', methods=['GET'])
 def get_course_map_details(map_id):
     config = current_app.config['APP_CONFIG']
@@ -122,9 +106,8 @@ def get_course_map_details(map_id):
     if not GOOGLE_CLIENT_ID:
          return jsonify({"error": "Google Client ID not configured."}), 500
 
-    course_maps_collection = get_course_maps_collection() # Get collection
+    course_maps_collection = get_course_maps_collection()
 
-    # 1. Authentication
     try:
         auth_header = request.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
@@ -140,21 +123,17 @@ def get_course_map_details(map_id):
         traceback.print_exc()
         return jsonify({"error": "Authentication failed."}), 500
 
-    # 2. Fetch Specific Map from Database
     try:
-        # Find map by its custom _id (which is a string UUID)
         course_map = course_maps_collection.find_one({"_id": map_id})
 
         if not course_map:
             return jsonify({"error": "Course map not found"}), 404
 
-        # 3. Authorization Check: Ensure the map belongs to the authenticated user
         if course_map.get("google_user_id") != google_user_id:
             print(f"Authorization failed: User {google_user_id} tried to access map {map_id} owned by {course_map.get('google_user_id')}")
-            return jsonify({"error": "Not authorized to access this course map"}), 403 # Forbidden
+            return jsonify({"error": "Not authorized to access this course map"}), 403
 
         print(f"Fetched details for course map {map_id}")
-        # _id is already a string UUID, no conversion needed
         return jsonify(course_map), 200
 
     except Exception as e:
@@ -162,7 +141,6 @@ def get_course_map_details(map_id):
         traceback.print_exc()
         return jsonify({"error": "Failed to fetch course map details"}), 500
 
-# --- Add PUT endpoint for updating maps ---
 @course_map_bp.route('/course-map/<map_id>', methods=['PUT'])
 def update_course_map(map_id):
     config = current_app.config['APP_CONFIG']
@@ -170,9 +148,8 @@ def update_course_map(map_id):
     if not GOOGLE_CLIENT_ID:
          return jsonify({"error": "Google Client ID not configured."}), 500
 
-    course_maps_collection = get_course_maps_collection() # Get collection
+    course_maps_collection = get_course_maps_collection()
 
-    # 1. Authentication
     try:
         auth_header = request.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
@@ -188,16 +165,14 @@ def update_course_map(map_id):
         traceback.print_exc()
         return jsonify({"error": "Authentication failed."}), 500
 
-    # 2. Get Update Data
     data = request.get_json()
     nodes = data.get('nodes')
     edges = data.get('edges')
-    map_name = data.get('name') # Optional: allow renaming
+    map_name = data.get('name')
 
     if nodes is None and edges is None and map_name is None:
         return jsonify({"error": "No update data provided (nodes, edges, or name)"}), 400
 
-    # 3. Fetch Map and Authorize
     try:
         existing_map = course_maps_collection.find_one({"_id": map_id})
         if not existing_map:
@@ -210,7 +185,6 @@ def update_course_map(map_id):
         traceback.print_exc()
         return jsonify({"error": "Failed to find course map for update"}), 500
 
-    # 4. Perform Update
     try:
         update_fields = {"updated_at": datetime.now(timezone.utc)}
         if nodes is not None: update_fields["nodes"] = nodes
@@ -223,7 +197,6 @@ def update_course_map(map_id):
         )
 
         if result.matched_count == 0:
-             # Should have been caught above, but double-check
              return jsonify({"error": "Course map not found during update"}), 404
 
         print(f"Course map {map_id} updated successfully by user {google_user_id}")
@@ -234,7 +207,6 @@ def update_course_map(map_id):
         traceback.print_exc()
         return jsonify({"error": "Failed to update course map"}), 500
 
-# --- Add DELETE endpoint for deleting maps ---
 @course_map_bp.route('/course-map/<map_id>', methods=['DELETE'])
 def delete_course_map(map_id):
     config = current_app.config['APP_CONFIG']
@@ -242,9 +214,8 @@ def delete_course_map(map_id):
     if not GOOGLE_CLIENT_ID:
          return jsonify({"error": "Google Client ID not configured."}), 500
 
-    course_maps_collection = get_course_maps_collection() # Get collection
+    course_maps_collection = get_course_maps_collection()
 
-    # 1. Authentication
     try:
         auth_header = request.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
@@ -260,7 +231,6 @@ def delete_course_map(map_id):
         traceback.print_exc()
         return jsonify({"error": "Authentication failed."}), 500
 
-    # 2. Fetch Map and Authorize
     try:
         existing_map = course_maps_collection.find_one({"_id": map_id})
         if not existing_map:
@@ -273,16 +243,14 @@ def delete_course_map(map_id):
         traceback.print_exc()
         return jsonify({"error": "Failed to find course map for deletion"}), 500
 
-    # 3. Perform Deletion
     try:
         result = course_maps_collection.delete_one({"_id": map_id})
 
         if result.deleted_count == 0:
-            # Should have been caught above, but double-check
             return jsonify({"error": "Course map not found during deletion"}), 404
 
         print(f"Course map {map_id} deleted successfully by user {google_user_id}")
-        return jsonify({"message": "Course map deleted successfully"}), 200 # Or 204 No Content
+        return jsonify({"message": "Course map deleted successfully"}), 200
 
     except Exception as e:
         print(f"Error deleting course map {map_id}: {e}")

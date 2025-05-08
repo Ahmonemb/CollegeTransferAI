@@ -4,39 +4,28 @@ from datetime import datetime, timedelta, time, timezone
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
 from bson.objectid import ObjectId
-# Import collection getter functions instead of direct collection objects
 from .database import get_users_collection
 
-# --- Rate Limits (Example: Daily) ---
 FREE_TIER_LIMIT = 10
-PREMIUM_TIER_LIMIT = 100 # Example limit for paid users
+PREMIUM_TIER_LIMIT = 100
 
-# --- Helper: Verify Google Token ---
 def verify_google_token(token, client_id):
-    """Verifies Google ID token and returns user info."""
-    if not client_id:
-        raise ValueError("Google Client ID not configured for verification.")
     try:
-        idinfo = id_token.verify_oauth2_token(
-            token, google_requests.Request(), client_id
-        )
-        print(f"Token verified for user: {idinfo.get('sub')}")
+        idinfo = id_token.verify_oauth2_token(token, google_requests.Request(), client_id)
+        if idinfo['iss'] not in ['accounts.google.com', 'https://accounts.google.com']:
+            raise ValueError('Wrong issuer.')
         return idinfo
-    except ValueError as e:
-        print(f"Token verification failed: {e}")
-        raise ValueError(f"Invalid token: {e}")
+    except ValueError as ve:
+        print(f"Google token verification failed: {ve}")
+        traceback.print_exc()
+        raise ValueError(f"Invalid token: {ve}")
     except Exception as e:
-        print(f"Unexpected error during token verification: {e}")
-        raise Exception(f"Token verification error: {e}")
+        print(f"An unexpected error occurred during Google token verification: {e}")
+        traceback.print_exc()
+        raise Exception(f"Token verification failed due to an unexpected error: {e}")
 
-# --- Helper: Get or Create User ---
 def get_or_create_user(idinfo):
-    """
-    Finds a user by google_user_id or creates a new one with default free tier.
-    Ensures Stripe-related fields exist.
-    Returns the user document from MongoDB.
-    """
-    users_collection = get_users_collection() # Get collection via function
+    users_collection = get_users_collection()
 
     google_user_id = idinfo.get('sub')
     if not google_user_id:
@@ -45,17 +34,15 @@ def get_or_create_user(idinfo):
     user = users_collection.find_one({'google_user_id': google_user_id})
 
     if not user:
-        print(f"User {google_user_id} not found. Creating new user.")
         new_user_data = {
             'google_user_id': google_user_id,
             'email': idinfo.get('email'),
             'name': idinfo.get('name'),
-            'tier': 'free', # Default tier
+            'tier': 'free',
             'requests_used_this_period': 0,
-            'period_start_date': datetime.now(timezone.utc), # Use timezone-aware
-            'created_at': datetime.now(timezone.utc), # Use timezone-aware
-            'last_login': datetime.now(timezone.utc), # Use timezone-aware
-            # Add Stripe fields with defaults
+            'period_start_date': datetime.now(timezone.utc),
+            'created_at': datetime.now(timezone.utc),
+            'last_login': datetime.now(timezone.utc),
             "stripe_customer_id": None,
             "stripe_subscription_id": None,
             "subscription_status": None,
@@ -63,17 +50,13 @@ def get_or_create_user(idinfo):
         }
         try:
             insert_result = users_collection.insert_one(new_user_data)
-            print(f"Successfully created new user: {google_user_id} with ID: {insert_result.inserted_id}")
-            # Fetch the newly created user to return it
             user = users_collection.find_one({'_id': insert_result.inserted_id})
             if not user:
-                 raise Exception(f"Failed to retrieve newly created user {google_user_id}")
+                raise Exception(f"Failed to retrieve newly created user {google_user_id}")
         except Exception as e:
-            print(f"Error creating user {google_user_id}: {e}")
             raise Exception(f"Database error creating user: {e}")
     else:
-        # Ensure essential fields exist for older users & update last_login
-        update_query = {'last_login': datetime.now(timezone.utc)} # Use timezone-aware
+        update_query = {'last_login': datetime.now(timezone.utc)}
         set_fields = {}
         if 'tier' not in user: set_fields['tier'] = 'free'
         if 'requests_used_this_period' not in user: set_fields['requests_used_this_period'] = 0
@@ -83,34 +66,23 @@ def get_or_create_user(idinfo):
         if 'subscription_status' not in user: set_fields['subscription_status'] = None
         if 'subscription_expires' not in user: set_fields['subscription_expires'] = None
 
-        if set_fields: # Only update if fields were missing
-             update_query.update(set_fields)
-             users_collection.update_one(
-                 {'google_user_id': google_user_id},
-                 {'$set': update_query}
-             )
-             # Re-fetch user data after update if fields were added
-             user = users_collection.find_one({"google_user_id": google_user_id})
-        else: # Just update last_login if no fields were missing
-             users_collection.update_one(
-                 {'google_user_id': google_user_id},
-                 {'$set': {'last_login': update_query['last_login']}}
-             )
-
-
-        print(f"Found existing user: {google_user_id}, Tier: {user.get('tier')}")
+        if set_fields:
+            update_query.update(set_fields)
+            users_collection.update_one(
+                {'google_user_id': google_user_id},
+                {'$set': update_query}
+            )
+            user = users_collection.find_one({"google_user_id": google_user_id})
+        else:
+            users_collection.update_one(
+                {'google_user_id': google_user_id},
+                {'$set': {'last_login': update_query['last_login']}}
+            )
 
     return user
 
-# --- Helper: Check and Update Usage ---
 def check_and_update_usage(user_data):
-    """
-    Checks if the user is within their usage limit based on tier.
-    Resets daily usage if necessary. Increments usage count if within limit.
-    Returns True if usage is allowed, False otherwise.
-    Raises Exception on database error.
-    """
-    users_collection = get_users_collection() # Get collection via function
+    users_collection = get_users_collection()
 
     tier = user_data.get('tier', 'free')
     limit = PREMIUM_TIER_LIMIT if tier == 'premium' else FREE_TIER_LIMIT
@@ -118,136 +90,96 @@ def check_and_update_usage(user_data):
     period_start = user_data.get('period_start_date')
     google_user_id = user_data.get('google_user_id')
 
-    now = datetime.now(timezone.utc) # Use timezone-aware
+    now = datetime.now(timezone.utc)
     reset_usage = False
 
-    # --- Check if usage period needs reset (daily reset logic) ---
     if period_start and isinstance(period_start, datetime):
-        # Ensure period_start is timezone-aware for comparison
         if period_start.tzinfo is None:
-             period_start = period_start.replace(tzinfo=timezone.utc)
+            period_start = period_start.replace(tzinfo=timezone.utc)
 
         if period_start.date() < now.date():
-            print(f"Resetting daily usage for user {google_user_id}")
             requests_used = 0
-            period_start = now # Use timezone-aware now
+            period_start = now
             reset_usage = True
     else:
-        # If period_start is missing or invalid, reset it
-        print(f"Initializing/Resetting usage period for user {google_user_id}")
         requests_used = 0
-        period_start = now # Use timezone-aware now
+        period_start = now
         reset_usage = True
 
-    # --- Check if limit is exceeded ---
     if requests_used >= limit:
-        print(f"Usage limit exceeded for user {google_user_id} (Tier: {tier}, Used: {requests_used}, Limit: {limit})")
-        return False # Limit exceeded
+        return False
 
-    # --- If limit is not exceeded, increment count ---
     try:
-        # Construct update_fields based on whether usage is being reset
         if reset_usage:
-            # If resetting, SET the count to 1 and update the start date
             update_fields = {
                 '$set': {
                     'requests_used_this_period': 1,
-                    'period_start_date': period_start, # Use timezone-aware period_start
-                    'last_request_timestamp': now # Use timezone-aware now
+                    'period_start_date': period_start,
+                    'last_request_timestamp': now
                 }
             }
-            print(f"  Applying reset update for user {google_user_id}") # Debugging print
         else:
-            # If not resetting, just INCREMENT the count and update the timestamp
             update_fields = {
                 '$inc': {'requests_used_this_period': 1},
-                '$set': {'last_request_timestamp': now} # Use timezone-aware now
+                '$set': {'last_request_timestamp': now}
             }
-            print(f"  Applying increment update for user {google_user_id}") # Debugging print
-
 
         result = users_collection.update_one(
             {'google_user_id': google_user_id},
             update_fields
         )
         if result.matched_count == 0:
-             # This case should ideally not happen if get_or_create_user worked
-             raise Exception(f"User {google_user_id} not found during usage update.")
+            raise Exception(f"User {google_user_id} not found during usage update.")
 
-        print(f"Usage updated for user {google_user_id}: {requests_used + 1}/{limit}")
-        return True # Usage allowed and updated
+        return True
     except Exception as e:
-        print(f"Error updating usage count for user {google_user_id}: {e}")
-        # Add traceback here if it's not already in the calling function's handler
         traceback.print_exc()
         raise Exception(f"Failed to update usage count: {e}")
 
-# --- Helper Function for Intersection (Moved from college_transfer_API.py) ---
 def calculate_intersection(results):
-    """Calculates the intersection of values from multiple dictionary results."""
-    # Corrected syntax: Use Python's 'any' and 'is None'
     if not results or any(res is None for res in results):
         return {}
 
-    # Filter out any potentially empty results before processing
     valid_results = [res for res in results if isinstance(res, dict) and res]
 
     if not valid_results:
-        return {} # No valid data to intersect
+        return {}
 
-    # Get IDs (values) from the first valid result as the starting point
     try:
-        # Ensure values are hashable (like strings or ints) before adding to set
         common_ids = set(str(v) for v in valid_results[0].values())
     except Exception as e:
-        print(f"Error processing first result for intersection: {e}")
-        return {} # First result wasn't as expected
+        return {}
 
-    # Intersect with IDs (values) from subsequent valid results
     for i in range(1, len(valid_results)):
         try:
             current_ids = set(str(v) for v in valid_results[i].values())
-            common_ids.intersection_update(current_ids) # More efficient intersection
+            common_ids.intersection_update(current_ids)
         except Exception as e:
-            print(f"Error processing result {i} for intersection: {e}")
-            continue # Skip if a result is malformed
+            continue
 
-    print(f"Common IDs after intersection: {common_ids}")
-
-    # Rebuild the result object using common IDs
     intersection = {}
-    # Use the first valid result to map IDs back to names (keys)
     name_map_source = valid_results[0]
-    # Create a reverse map (id -> name) for efficiency
     try:
-        # Ensure values are hashable before creating the reverse map
         id_to_name_map = {str(v): k for k, v in name_map_source.items()}
     except Exception as e:
-        print(f"Error creating reverse map for intersection: {e}")
-        id_to_name_map = {} # Handle potential errors if source isn't dict
+        id_to_name_map = {}
 
     for common_id in common_ids:
-        # common_id is already a string from the set creation
         name = id_to_name_map.get(common_id)
         if name:
-            # Find the original ID type if needed, assuming it matches the source value type
             original_id = next((v for v in name_map_source.values() if str(v) == common_id), common_id)
             intersection[name] = original_id
         else:
-            # Fallback: Search other results if name not in first one (less efficient)
-            print(f"Warning: Could not find name for common ID {common_id} in first source. Searching others...")
             found = False
             for res in valid_results:
-                 try:
+                try:
                     for k, v in res.items():
                         if str(v) == common_id:
-                            intersection[k] = v # Use original key and value
+                            intersection[k] = v
                             found = True
                             break
-                 except Exception:
-                     continue # Skip malformed results
-                 if found: break # Found it in this result dict
+                except Exception:
+                    continue
+                if found: break
 
-    print(f"Intersection result: {intersection}")
     return intersection
-# --- End Helper Function ---

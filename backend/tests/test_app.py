@@ -34,4 +34,3 @@ def test_get_academic_years(client):
     data = response.get_json()
     assert isinstance(data, (dict))
 
-# Add more tests for other endpoints as needed

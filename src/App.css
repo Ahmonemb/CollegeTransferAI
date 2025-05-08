@@ -1,4 +1,3 @@
-/* Reset and Base Styles */
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
@@ -6,176 +5,165 @@
 
 
 body {
-  /* Use a modern system font stack */
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
   margin: 0;
   padding: 0;
-  /* Placeholder background - replace with actual college images */
   background-size: cover;
   background-position: center;
-  background-attachment: fixed; /* Keep background fixed during scroll */
+  background-attachment: fixed; 
   color: #333;
   line-height: 1.6;
-  font-size: 16px; /* Slightly larger base font */
+  font-size: 16px; 
 }
 
-/* Container for centering content */
-#root > div { /* Target the main div rendered by React */
-  margin: 40px auto; /* More vertical margin */
-  padding: 30px 40px; /* Increased padding */
-  /* Slightly transparent white background */
+#root > div { 
+  margin: 40px auto; 
+  padding: 30px 40px; 
   background-color: rgba(255, 255, 255, 0.95);
-  border: 1px solid #e0e0e0; /* Softer border */
-  border-radius: 8px; /* Rounded corners */
-  box-shadow: 0 6px 18px rgba(0,0,0,0.12); /* Slightly stronger shadow */
-  /* Add a subtle fade-in animation */
+  border: 1px solid #e0e0e0; 
+  border-radius: 8px; 
+  box-shadow: 0 6px 18px rgba(0,0,0,0.12); 
   animation: fadeIn 0.5s ease-out forwards;
 }
 
 h1, h2, h3 {
-  color: #1a2b4d; /* Darker, less saturated blue */
+  color: #1a2b4d; 
   margin-top: 0;
-  margin-bottom: 1em; /* Consistent bottom margin */
-  font-weight: 600; /* Slightly bolder */
+  margin-bottom: 1em; 
+  font-weight: 600; 
 }
 
 h1 {
-  font-size: 2.2em; /* Larger H1 */
-  text-align: center; /* Center main title */
+  font-size: 2.2em; 
+  text-align: center; 
   margin-bottom: 1.5em;
 }
 
-/* Form Styling */
 .form-group {
-  margin-bottom: 1.5rem; /* Increased spacing */
+  margin-bottom: 1.5rem; 
   position: relative;
-  /* Add transition for potential future effects */
   transition: all 0.3s ease-in-out;
 }
 
 label {
   display: block;
   margin-bottom: 0.6rem;
-  font-weight: 500; /* Medium weight */
+  font-weight: 500; 
   color: #555;
   font-size: 0.95em;
 }
 
 input[type="text"],
 select {
-  padding: 12px 15px; /* More padding */
+  padding: 12px 15px; 
   width: 100%;
-  border: 1px solid #d1d5db; /* Slightly darker border */
-  border-radius: 6px; /* More rounded corners */
+  border: 1px solid #d1d5db; 
+  border-radius: 6px; 
   box-sizing: border-box;
   font-size: 1rem;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease; /* Smooth transitions */
+  transition: border-color 0.2s ease, box-shadow 0.2s ease; 
 }
 
 input[type="text"]:focus,
 select:focus {
   outline: none;
-  border-color: #3b82f6; /* Blue focus border */
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3); /* Subtle blue glow */
+  border-color: #3b82f6; 
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3); 
 }
 
 input[type="text"]:disabled {
-  background-color: #f3f4f6; /* Lighter disabled background */
+  background-color: #f3f4f6; 
   cursor: not-allowed;
   color: #9ca3af;
 }
 
-/* Button Styling */
 button {
-  background-image: linear-gradient(to right, #3b82f6, #2563eb); /* Blue gradient */
+  background-image: linear-gradient(to right, #3b82f6, #2563eb); 
   color: white;
   border: none;
-  padding: 12px 25px; /* More padding */
+  padding: 12px 25px; 
   border-radius: 6px;
   cursor: pointer;
-  font-size: 1.05rem; /* Slightly larger font */
+  font-size: 1.05rem; 
   font-weight: 500;
-  transition: all 0.2s ease; /* Transition all properties */
+  transition: all 0.2s ease; 
   display: inline-block;
   width: auto;
   margin-bottom: 0;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1); /* Subtle shadow */
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1); 
 }
 
 button:hover {
-  background-image: linear-gradient(to right, #2563eb, #1d4ed8); /* Darker gradient on hover */
-  box-shadow: 0 4px 8px rgba(0,0,0,0.15); /* Slightly larger shadow on hover */
-  transform: translateY(-2px); /* Slightly more lift effect */
+  background-image: linear-gradient(to right, #2563eb, #1d4ed8); 
+  box-shadow: 0 4px 8px rgba(0,0,0,0.15); 
+  transform: translateY(-2px); 
 }
 
 button:active {
-    transform: translateY(0); /* Remove lift on click */
+    transform: translateY(0);
     box-shadow: 0 1px 2px rgba(0,0,0,0.1);
 }
 
 button:disabled {
-  background-image: none; /* Remove gradient */
-  background-color: #9ca3af; /* Gray out disabled button */
+  background-image: none; 
+  background-color: #9ca3af; 
   cursor: not-allowed;
   box-shadow: none;
   transform: none;
 }
 
-/* Result Area */
 .result {
   margin-top: 25px;
-  padding: 20px; /* Increased padding */
+  padding: 20px; 
   border: 1px solid #ddd;
-  background-color: #f8f9fa; /* Slightly different background */
-  border-radius: 6px; /* Match other elements */
-  animation: fadeIn 0.5s ease-out forwards; /* Fade in results */
+  background-color: #f8f9fa; 
+  border-radius: 6px; 
+  animation: fadeIn 0.5s ease-out forwards; 
 }
 
 .result h3 {
   margin-top: 0;
-  color: #495057; /* Slightly darker heading */
+  color: #495057; 
 }
 
-/* Dropdown Styling */
 .dropdown {
   position: absolute;
   background-color: white;
-  border: 1px solid #d1d5db; /* Match input border */
+  border: 1px solid #d1d5db; 
   border-top: none;
   max-height: 250px;
   overflow-y: auto;
   width: 100%;
   box-sizing: border-box;
   z-index: 1000;
-  box-shadow: 0 6px 12px rgba(0,0,0,0.1); /* Slightly larger shadow */
-  border-radius: 0 0 6px 6px; /* Match input rounding */
-  margin-top: -1px; /* Overlap slightly with input */
+  box-shadow: 0 6px 12px rgba(0,0,0,0.1); 
+  border-radius: 0 0 6px 6px; 
+  margin-top: -1px; 
 }
 
 .dropdown-item {
-  padding: 10px 15px; /* More padding */
+  padding: 10px 15px; 
   cursor: pointer;
   font-size: 0.95rem;
-  border-bottom: 1px solid #f3f4f6; /* Lighter separator */
-  transition: background-color 0.15s ease, color 0.15s ease; /* Smooth hover */
+  border-bottom: 1px solid #f3f4f6; 
+  transition: background-color 0.15s ease, color 0.15s ease; 
 }
 .dropdown-item:last-child {
   border-bottom: none;
 }
 
 .dropdown-item:hover {
-  background-color: #eff6ff; /* Very light blue hover */
-  color: #1d4ed8; /* Darker blue text on hover */
+  background-color: #eff6ff; 
+  color: #1d4ed8; 
 }
 
-/* Link Styling */
 a {
-  color: #2563eb; /* Match button blue */
+  color: #2563eb; 
   text-decoration: none;
   transition: color 0.2s ease;
 }
 
 a:hover {
-  color: #1d4ed8; /* Darker blue on hover */
+  color: #1d4ed8; 
   text-decoration: underline;
 }

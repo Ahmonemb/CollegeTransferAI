@@ -40,7 +40,6 @@ function AgreementTabs({
 
     return (
         <div style={{ display: 'flex', borderBottom: '1px solid #ccc', flexShrink: 0, background: '#e9ecef' }}>
-            {/* Dynamic Major Agreement Tabs */}
             {agreementData.map((agreement, index) => (
                 <button
                     key={agreement.sendingId}

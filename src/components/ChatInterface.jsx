@@ -1,11 +1,7 @@
 import React from 'react';
-
-// Import Components
 import ChatHeader from './ChatInterface/ChatHeader';
 import MessageList from './ChatInterface/MessageList';
 import MessageInput from './ChatInterface/MessageInput';
-
-// Import Hook
 import { useChat } from '../hooks/useChat';
 
 function ChatInterface({
@@ -37,7 +33,6 @@ function ChatInterface({
         academicYearId
     );
 
-    // Determine disabled states and placeholder text
     const isInteractionDisabled = isLoading || !user || !imageFilenames || imageFilenames.length === 0;
     const isSendDisabled = isInteractionDisabled || !userInput.trim();
 

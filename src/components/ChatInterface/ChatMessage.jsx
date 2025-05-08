@@ -1,5 +1,5 @@
 import React from 'react';
-import { formatText } from '../../utils/formatText'; // Import the helper
+import { formatText } from '../../utils/formatText'; 
 
 function ChatMessage({ msg, userName }) {
     return (
@@ -13,13 +13,10 @@ function ChatMessage({ msg, userName }) {
                 border: msg.type === 'system' ? '1px solid #f5c6cb' : 'none',
                 maxWidth: '80%',
                 wordWrap: 'break-word',
-                whiteSpace: 'pre-wrap' // Crucial for rendering newlines and spaces correctly
+                whiteSpace: 'pre-wrap' 
             }}>
-                {/* Add Prefix based on type */}
                 {msg.type === 'bot' && <strong style={{ marginRight: '5px' }}>AI:</strong>}
-                {/* Use userName prop if available, otherwise fallback */}
                 {msg.type === 'user' && <strong style={{ marginRight: '5px' }}>{userName || 'You'}:</strong>}
-                {/* Render formatted text */}
                 {formatText(msg.text)}
             </span>
         </div>

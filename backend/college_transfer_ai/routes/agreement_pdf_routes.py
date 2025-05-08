@@ -1,20 +1,13 @@
-# filepath: backend/college_transfer_ai/routes/agreement_pdf_routes.py
 import traceback
 import io
-import fitz # PyMuPDF - Keep import here for image generation
+import fitz 
 from flask import Blueprint, jsonify, request, send_file, make_response
-from ..database import get_gridfs # Keep for serving images
-# Import the specific PDF fetching function and the client for name resolution
+from ..database import get_gridfs 
 from ..pdf_service import PdfService
 from ..assist_api_client import assist_client
 
-agreement_pdf_bp = Blueprint('agreement_pdf_bp', __name__) # Removed url_prefix, assuming it's added during registration
+agreement_pdf_bp = Blueprint('agreement_pdf_bp', __name__) 
 
-# Remove global fs variable: fs = None
-# Remove unused init function: def init_pdf_routes(app): ...
-
-# Initialize the PDF service instance (assuming assist_client is available globally or passed appropriately)
-# If assist_client relies on app context, this might need adjustment or lazy initialization.
 pdf_service_instance = PdfService(assist_client)
 
 @agreement_pdf_bp.route('/articulation-agreements', methods=['POST'])
@@ -82,20 +75,15 @@ def get_articulation_agreements():
 
 @agreement_pdf_bp.route('/pdf-images/<path:filename>', methods=['GET'])
 def get_pdf_images(filename):
-    """
-    Checks if images for a PDF exist in GridFS. If not, generates, stores,
-    and returns them. If they exist, returns the existing filenames.
-    """
-    fs = get_gridfs() # Get GridFS instance directly
+    fs = get_gridfs() 
     if fs is None:
-        print("Error: GridFS not available when requested in get_pdf_images.") # More specific log
+        print("Error: GridFS not available when requested in get_pdf_images.") 
         return jsonify({"error": "Storage service not available."}), 503
 
     try:
-        # Check for existing sorted images
         existing_images_cursor = fs.find(
             {"metadata.original_pdf": filename, "contentType": "image/png"},
-            sort=[("metadata.page_number", 1)] # Sort by page number
+            sort=[("metadata.page_number", 1)] 
         )
         existing_images = list(existing_images_cursor)
 
@@ -104,7 +92,7 @@ def get_pdf_images(filename):
             print(f"Found {len(image_filenames)} existing images for {filename} (sorted)")
             return jsonify({"image_filenames": image_filenames})
 
-        # If not found, generate images
+        
         print(f"Generating images for {filename}...")
         grid_out = fs.find_one({"filename": filename})
         if not grid_out:
@@ -113,16 +101,15 @@ def get_pdf_images(filename):
         pdf_data = grid_out.read()
         doc = fitz.open(stream=pdf_data, filetype="pdf")
         image_filenames = []
-        zoom = 2 # Increase resolution
+        zoom = 2 
         mat = fitz.Matrix(zoom, zoom)
-        generated_files_metadata = [] # Store metadata to sort later
+        generated_files_metadata = [] 
 
         for i, page in enumerate(doc):
             try:
                 pix = page.get_pixmap(matrix=mat)
                 img_bytes = pix.tobytes("png")
                 image_filename = f"{filename}_page_{i}.png"
-                # Store with metadata including original PDF and page number
                 fs.put(
                     img_bytes,
                     filename=image_filename,
@@ -132,11 +119,9 @@ def get_pdf_images(filename):
                 generated_files_metadata.append({"filename": image_filename, "page_number": i})
             except Exception as page_err:
                  print(f"Error processing page {i} for {filename}: {page_err}")
-                 # Decide if you want to skip the page or fail the whole process
 
         doc.close()
 
-        # Sort the generated filenames by page number before returning
         generated_files_metadata.sort(key=lambda x: x["page_number"])
         image_filenames = [item["filename"] for item in generated_files_metadata]
 
@@ -151,10 +136,9 @@ def get_pdf_images(filename):
 
 @agreement_pdf_bp.route('/image/<path:filename>', methods=['GET'])
 def get_image(filename):
-    """Serves an image file directly from GridFS with cache headers."""
-    fs = get_gridfs() # Get GridFS instance directly
+    fs = get_gridfs() 
     if fs is None:
-        print("Error: GridFS not available when requested in get_image.") # More specific log
+        print("Error: GridFS not available when requested in get_image.") 
         return jsonify({"error": "Storage service not available."}), 503
 
     grid_out = None
@@ -170,7 +154,6 @@ def get_image(filename):
             as_attachment=False,
             download_name=grid_out.filename
         ))
-        # Set cache headers for immutable content
         response.headers['Cache-Control'] = 'public, immutable, max-age=31536000'
         return response
 

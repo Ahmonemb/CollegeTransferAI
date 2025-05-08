@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { fetchData } from '../services/api';
 
 export function useChat(
-    imageFilenames, // This holds the list of all relevant image filenames
+    imageFilenames,
     selectedMajorName,
     user,
     sendingInstitutionId,
@@ -16,62 +16,49 @@ export function useChat(
     const [chatError, setChatError] = useState(null);
     const initialAnalysisSentRef = useRef(false);
 
-    // Log messages
     useEffect(() => {
         console.log("Current message history:", messages);
     }, [messages]);
 
-    // Clear chat and reset flag when context changes or user logs out
     useEffect(() => {
         setMessages([]);
         setUserInput('');
         setChatError(null);
         initialAnalysisSentRef.current = false;
         console.log("DEBUG: Chat cleared and initialAnalysisSentRef reset due to context/user change.");
-    }, [imageFilenames, selectedMajorName, user, sendingInstitutionId, receivingInstitutionId, academicYearId]); // Added more dependencies to ensure reset
+    }, [imageFilenames, selectedMajorName, user, sendingInstitutionId, receivingInstitutionId, academicYearId]);
 
-    // Effect to send initial analysis request
     useEffect(() => {
         console.log("DEBUG: Initial analysis effect triggered.");
         console.log("DEBUG: User object:", user);
         console.log("DEBUG: User ID:", user ? user.id : "N/A");
         console.log("DEBUG: User ID Token:", user ? (user.idToken ? "Present" : "MISSING") : "N/A");
-        // Use the stable list of all image filenames passed in
         console.log("DEBUG: imageFilenames (for initial analysis):", imageFilenames);
         console.log("DEBUG: initialAnalysisSentRef.current:", initialAnalysisSentRef.current);
         console.log("DEBUG: isLoading:", isLoading);
 
         if (!user) {
             console.log("DEBUG: Skipping initial analysis - User not logged in.");
-            initialAnalysisSentRef.current = false; // Ensure it's false if user logs out
+            initialAnalysisSentRef.current = false;
             return;
         }
-
-        // Check the condition for sending using the stable imageFilenames list
         const shouldSend = imageFilenames && imageFilenames.length > 0 && !initialAnalysisSentRef.current && !isLoading;
         console.log("DEBUG: Should send initial analysis?", shouldSend);
-
-        // --- Temporarily disabled initial analysis sending ---
-        // if (shouldSend) {
-        if (shouldSend && false) { // Set to false to disable sending for now
-        // --- End temporary disable ---
+        if (shouldSend && false) {
             const sendInitialAnalysis = async () => {
-                // Double-check user and token right before sending
                 if (!user || !user.idToken) {
                     console.error("DEBUG: Cannot send initial analysis: User logged out or token missing just before sending.");
                     setChatError("Authentication error. Please log in again.");
                     setMessages([{ type: 'system', text: "Authentication error. Please log in again." }]);
-                    initialAnalysisSentRef.current = false; // Reset if auth fails here
+                    initialAnalysisSentRef.current = false;
                     return;
                 }
 
                 console.log("DEBUG: Conditions met. Calling sendInitialAnalysis function...");
                 setIsLoading(true);
                 setChatError(null);
-                initialAnalysisSentRef.current = true; // Set flag immediately
+                initialAnalysisSentRef.current = true;
                 console.log("DEBUG: initialAnalysisSentRef.current set to true.");
-
-                // Log context variables used in the prompt
                 console.log("DEBUG: Context for prompt - academicYearId:", academicYearId);
                 console.log("DEBUG: Context for prompt - sendingInstitutionId:", sendingInstitutionId);
                 console.log("DEBUG: Context for prompt - receivingInstitutionId:", receivingInstitutionId);
@@ -107,7 +94,7 @@ Analyze the provided agreement images thoroughly. Perform the following steps:
                 const payload = {
                     new_message: initialPrompt,
                     history: [],
-                    image_filenames: imageFilenames // Use the stable list here
+                    image_filenames: imageFilenames
                 };
 
                 try {
@@ -137,10 +124,8 @@ Analyze the provided agreement images thoroughly. Perform the following steps:
                     setMessages([{ type: 'system', text: `Error during analysis: ${err.message}` }]);
                     if (err.message.includes("Authorization")) {
                         console.log("DEBUG: Resetting initialAnalysisSentRef due to Authorization error.");
-                        initialAnalysisSentRef.current = false; // Reset if auth fails
+                        initialAnalysisSentRef.current = false;
                     } else {
-                        // Consider if other errors should also reset the flag,
-                        // maybe allow retry? For now, keep it true on other errors.
                         console.log("DEBUG: Keeping initialAnalysisSentRef true despite non-auth error.");
                     }
                 } finally {
@@ -156,8 +141,6 @@ Analyze the provided agreement images thoroughly. Perform the following steps:
             if (initialAnalysisSentRef.current) console.log("Reason: Initial analysis already sent.");
             if (isLoading) console.log("Reason: Already loading.");
         }
-    // Ensure all relevant context variables are dependencies
-    // Use the stable imageFilenames list in the dependency array
     }, [imageFilenames, isLoading, selectedMajorName, sendingInstitutionId, allSendingInstitutionIds, receivingInstitutionId, academicYearId, user]);
 
     const handleSend = useCallback(async () => {
@@ -184,12 +167,10 @@ Analyze the provided agreement images thoroughly. Perform the following steps:
                 role: msg.type === 'bot' ? 'assistant' : msg.type,
                 content: msg.text
             }));
-
-        // Include image_filenames in the payload for every message
         const payload = {
             new_message: currentInput,
             history: apiHistory,
-            image_filenames: imageFilenames // Add the list of all image filenames here
+            image_filenames: imageFilenames
         };
 
         try {
@@ -218,7 +199,6 @@ Analyze the provided agreement images thoroughly. Perform the following steps:
         } finally {
             setIsLoading(false);
         }
-    // Add imageFilenames to the dependency array for useCallback
     }, [userInput, isLoading, user, messages, imageFilenames]);
 
     return {

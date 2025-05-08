@@ -12,8 +12,6 @@ export function useInstitutionData() {
         let isMounted = true;
         setIsLoading(true);
         setError(null);
-
-        // --- Check Cache ---
         try {
             const cachedData = localStorage.getItem(CACHE_KEY);
             if (cachedData) {
@@ -23,19 +21,16 @@ export function useInstitutionData() {
                     setInstitutions(parsedData);
                     setIsLoading(false);
                 }
-                return; // Exit early if loaded from cache
+                return;
             }
         } catch (e) {
             console.error("Error loading institutions from cache:", e);
-            localStorage.removeItem(CACHE_KEY); // Clear cache on error
+            localStorage.removeItem(CACHE_KEY);
         }
-
-        // --- Fetch from API ---
         fetchData('institutions')
             .then(data => {
                 if (isMounted) {
                     setInstitutions(data);
-                    // --- Cache Result ---
                     try {
                         localStorage.setItem(CACHE_KEY, JSON.stringify(data));
                         console.log("Institutions cached successfully:", CACHE_KEY);
@@ -47,7 +42,7 @@ export function useInstitutionData() {
             .catch(err => {
                 if (isMounted) {
                     setError(`Failed to load institutions: ${err.message}`);
-                    setInstitutions({}); // Clear on error
+                    setInstitutions({});
                 }
             })
             .finally(() => {
@@ -57,9 +52,9 @@ export function useInstitutionData() {
             });
 
         return () => {
-            isMounted = false; // Cleanup function to prevent state updates on unmounted component
+            isMounted = false;
         };
-    }, []); // Empty dependency array means this runs once on mount
+    }, []);
 
     return { institutions, isLoading, error };
 }

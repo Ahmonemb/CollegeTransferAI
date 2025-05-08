@@ -7,12 +7,10 @@ export function useAcademicYears(selectedSendingInstitutions, selectedReceivingI
     const [academicYears, setAcademicYears] = useState({});
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState(null);
-    const cacheRef = useRef({}); // Simple in-memory cache
-
-    // Define senderIds and key outside useEffect
+    const cacheRef = useRef({});
     const senderIds = selectedSendingInstitutions.map(s => s.id);
     const senderIdsString = senderIds.sort().join(',');
-    const contextKey = `${senderIdsString}_${selectedReceivingId}`; // Key for cache/localStorage
+    const contextKey = `${senderIdsString}_${selectedReceivingId}`;
 
     useEffect(() => {
         let isMounted = true;
@@ -21,33 +19,29 @@ export function useAcademicYears(selectedSendingInstitutions, selectedReceivingI
             setAcademicYears({});
             setIsLoading(false);
             setError(null);
-            return; // Clear years if selections are incomplete
+            return;
         }
 
         const fetchCommonYears = async () => {
             if (!isMounted) return;
             setIsLoading(true);
             setError(null);
-            setAcademicYears({}); // Clear previous results
+            setAcademicYears({});
 
             const localStorageKey = `${LOCAL_STORAGE_PREFIX}years_intersection_${contextKey}`;
             const memoryCacheKey = `years_${contextKey}`;
-
-            // 1. Check In-Memory Cache
             if (cacheRef.current[memoryCacheKey]) {
                 console.log(`In-memory cache hit for years intersection: ${contextKey}`);
                 setAcademicYears(cacheRef.current[memoryCacheKey]);
                 setIsLoading(false);
                 return;
             }
-
-            // 2. Check localStorage
             try {
                 const cachedDataString = localStorage.getItem(localStorageKey);
                 if (cachedDataString) {
                     console.log(`LocalStorage hit for years intersection (${localStorageKey})`);
                     const cachedData = JSON.parse(cachedDataString);
-                    cacheRef.current[memoryCacheKey] = cachedData; // Update in-memory
+                    cacheRef.current[memoryCacheKey] = cachedData;
                     setAcademicYears(cachedData);
                     setIsLoading(false);
                     return;
@@ -56,25 +50,20 @@ export function useAcademicYears(selectedSendingInstitutions, selectedReceivingI
                 console.error(`Error reading years intersection from localStorage (${localStorageKey}):`, e);
                 localStorage.removeItem(localStorageKey);
             }
-
-            // 3. Fetch from API (Single Call)
             console.log(`Cache miss for years intersection (${contextKey}). Fetching...`);
             try {
-                // Pass comma-separated sending IDs and single receiving ID
                 const data = await fetchData(`academic-years?sendingId=${senderIdsString}&receivingId=${selectedReceivingId}`);
 
                 if (!isMounted) return;
 
                 let finalData = {};
                 let warnings = null;
-
-                // Handle potential 207 Multi-Status response
                 if (data && data.years !== undefined) {
                     finalData = data.years || {};
                     warnings = data.warnings;
                     if (warnings) console.warn("Partial fetch failure for academic years:", warnings);
                 } else {
-                    finalData = data || {}; // Assume direct object if not 207 structure
+                    finalData = data || {};
                 }
 
                  if (Object.keys(finalData).length === 0 && !warnings) {
@@ -82,9 +71,7 @@ export function useAcademicYears(selectedSendingInstitutions, selectedReceivingI
                  }
 
                 setAcademicYears(finalData);
-                cacheRef.current[memoryCacheKey] = finalData; // Store in memory
-
-                // Store in localStorage
+                cacheRef.current[memoryCacheKey] = finalData;
                 try {
                     localStorage.setItem(localStorageKey, JSON.stringify(finalData));
                 } catch (e) {
@@ -95,11 +82,11 @@ export function useAcademicYears(selectedSendingInstitutions, selectedReceivingI
                 console.error("Error fetching common academic years:", err);
                 if (isMounted) {
                     setError(`Failed to load common academic years: ${err.message}`);
-                    setAcademicYears({}); // Clear on error
+                    setAcademicYears({});
                 }
             } finally {
                 if (isMounted) {
-                    setIsLoading(false); // Stop loading
+                    setIsLoading(false);
                 }
             }
         };
@@ -107,10 +94,8 @@ export function useAcademicYears(selectedSendingInstitutions, selectedReceivingI
         fetchCommonYears();
 
         return () => {
-            isMounted = false; // Cleanup
+            isMounted = false;
         };
-    // Depend on the sorted string of sender IDs and the receiver ID
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [senderIdsString, selectedReceivingId]);
 
     return { academicYears, isLoading, error };

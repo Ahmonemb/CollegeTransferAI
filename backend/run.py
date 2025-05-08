@@ -1,7 +1,5 @@
 import os
 import traceback
-# Ensure the college_transfer_ai package is importable
-# This might require adjusting PYTHONPATH or running from the correct directory
 try:
     from college_transfer_ai import create_app
 except ImportError as e:
@@ -19,11 +17,8 @@ except Exception as app_create_err:
 
 
 if __name__ == '__main__':
-    # Use environment variables for host, port, and debug mode is recommended
     host = os.environ.get('FLASK_RUN_HOST', '0.0.0.0')
-    # Default port to 5000 if not set
     port = int(os.environ.get('FLASK_RUN_PORT', os.environ.get('PORT', 5000)))
-    # Default debug to True if FLASK_DEBUG is not 'false' or '0'
     debug_str = os.environ.get('FLASK_DEBUG', 'True').lower()
     debug = debug_str not in ['false', '0', 'f']
 
@@ -33,11 +28,9 @@ if __name__ == '__main__':
     print(f"Debug Mode: {debug}")
 
     try:
-        # Use waitress or gunicorn in production instead of app.run
         if debug:
             app.run(debug=True, host=host, port=port)
         else:
-            # Example using waitress (install waitress first: pip install waitress)
             try:
                 from waitress import serve
                 print("Running in production mode using waitress...")

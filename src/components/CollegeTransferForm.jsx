@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react'; // Add useRef
+import React, { useState, useEffect, useCallback, useRef } from 'react'; 
 import { useNavigate } from 'react-router-dom';
 import { fetchData } from '../services/api';
 import '../App.css';
@@ -8,51 +8,42 @@ import { useAcademicYears } from '../hooks/useAcademicYears';
 const CollegeTransferForm = () => {
     const navigate = useNavigate();
 
-    // --- State for fetched data ---
-    const [institutions, setInstitutions] = useState({}); // All institutions (for sending dropdown)
-    // const [academicYears, setAcademicYears] = useState({});
+    const [institutions, setInstitutions] = useState({}); 
 
-    // --- State for input values and selections ---
     const [sendingInputValue, setSendingInputValue] = useState('');
     const [receivingInputValue, setReceivingInputValue] = useState('');
     const [yearInputValue, setYearInputValue] = useState('');
 
-    const [selectedSendingInstitutions, setSelectedSendingInstitutions] = useState([]); // Array for multiple sending
-    const [selectedReceivingId, setSelectedReceivingId] = useState(null); // Single receiving ID
+    const [selectedSendingInstitutions, setSelectedSendingInstitutions] = useState([]); 
+    const [selectedReceivingId, setSelectedReceivingId] = useState(null); 
     const [selectedYearId, setSelectedYearId] = useState(null);
 
-    // --- State for dropdown visibility and filtered options ---
     const [showSendingDropdown, setShowSendingDropdown] = useState(false);
     const [showReceivingDropdown, setShowReceivingDropdown] = useState(false);
     const [showYearDropdown, setShowYearDropdown] = useState(false);
 
-    // const [filteredInstitutions, setFilteredInstitutions] = useState([]); // No longer needed?
-    const [filteredSending, setFilteredSending] = useState([]); // Options for the *current* sending input
-    const [filteredReceiving, setFilteredReceiving] = useState([]); // Options for receiving input
+    const [filteredSending, setFilteredSending] = useState([]); 
+    const [filteredReceiving, setFilteredReceiving] = useState([]); 
     const [filteredYears, setFilteredYears] = useState([]);
 
-    // --- State for loading and results ---
-    const [isLoading] = useState(false); // Consider separate loading states if needed
+    const [isLoading] = useState(false); 
     const [error, setError] = useState(null);
 
-    // --- Cache Ref for Institutions ---
-    const institutionsCacheRef = useRef(null); // In-memory cache
+    const institutionsCacheRef = useRef(null); 
 
     const { availableReceivingInstitutions, isLoading: isLoadingReceiving, error: receivingError } = useReceivingInstitutions(selectedSendingInstitutions);
     const { academicYears, isLoading: isLoadingYears, error: yearsError } = useAcademicYears(selectedSendingInstitutions, selectedReceivingId);
 
-    // Combine errors if needed, or handle separately
-    const combinedError = receivingError || yearsError || error; // 'error' is the form's general error state
+    const combinedError = receivingError || yearsError || error; 
 
-    // --- Helper Functions (resetForm - adjust state clearing) ---
     // const resetForm = useCallback(() => {
     //     setSendingInputValue('');
     //     setReceivingInputValue('');
     //     setYearInputValue('');
-    //     setSelectedSendingInstitutions([]); // Clear array
-    //     setSelectedReceivingId(null); // Clear single ID
+    //     setSelectedSendingInstitutions([]); 
+    //     setSelectedReceivingId(null); 
     //     setSelectedYearId(null);
-    //     setAvailableReceivingInstitutions({}); // Clear available receiving
+    //     setAvailableReceivingInstitutions({}); 
     //     setFilteredSending([]);
     //     setFilteredReceiving([]);
     //     setFilteredYears([]);
@@ -62,12 +53,10 @@ const CollegeTransferForm = () => {
     //     setError(null);
     // }, []);
 
-    // --- Effects for Initial Data Loading (Institutions, Years) ---
     useEffect(() => {
-        const cacheInstitutionsKey = "allInstitutions"; // More specific key
+        const cacheInstitutionsKey = "allInstitutions"; 
         let cachedInstitutions = null;
 
-        // --- 1. Check In-Memory Cache ---
         if (institutionsCacheRef.current) {
             console.log("Loaded institutions from in-memory cache.");
             setInstitutions(institutionsCacheRef.current);
@@ -75,30 +64,27 @@ const CollegeTransferForm = () => {
             return;
         }
 
-        // --- 2. Check localStorage ---
         try {
             const cachedData = localStorage.getItem(cacheInstitutionsKey);
             if (cachedData) {
                 cachedInstitutions = JSON.parse(cachedData);
                 console.log("Loaded institutions from localStorage:", cacheInstitutionsKey);
                 setInstitutions(cachedInstitutions);
-                institutionsCacheRef.current = cachedInstitutions; // Update in-memory cache
+                institutionsCacheRef.current = cachedInstitutions; 
                 setError(null);
                 return;
             }
         } catch (e) {
             console.error("Error loading institutions from localStorage:", e);
-            localStorage.removeItem(cacheInstitutionsKey); // Clear cache on error
+            localStorage.removeItem(cacheInstitutionsKey); 
         }
 
-        // --- 3. Fetch from API ---
         console.log("Cache miss for institutions. Fetching...");
-        fetchData('/institutions') // Ensure endpoint is correct
+        fetchData('/institutions') 
             .then(data => {
                 if (data && Object.keys(data).length > 0) {
                     setInstitutions(data);
-                    institutionsCacheRef.current = data; // Store in in-memory cache
-                    // --- Cache Result in localStorage ---
+                    institutionsCacheRef.current = data; 
                     try {
                         localStorage.setItem(cacheInstitutionsKey, JSON.stringify(data));
                         console.log("Institutions cached successfully:", cacheInstitutionsKey);
@@ -112,115 +98,9 @@ const CollegeTransferForm = () => {
             })
             .catch(err => setError(`Failed to load institutions: ${err.message}`));
 
-    }, []); // Runs only once on mount
+    }, []); 
 
-    // // --- MODIFIED Effect for Fetching Receiving Institutions based on ALL Senders ---
-    // useEffect(() => {
-    //     // Clear previous receiving selections and data whenever sending institutions change
-    //     setReceivingInputValue('');
-    //     setSelectedReceivingId(null);
-    //     // ALSO CLEAR YEAR SELECTION when sending institutions change
-    //     setYearInputValue('');
-    //     setSelectedYearId(null);
-    //     setFilteredReceiving([]);
-    //     setError(null); // Clear previous errors
-
-    //     const fetchAndIntersectReceiving = async () => {
-    //         if (selectedSendingInstitutions.length === 0) {
-    //             return;
-    //         }
-
-    //         setError(null);
-
-    //         try {
-    //             if (selectedSendingInstitutions.length === 1) {
-    //                 // --- Fetch for a single sender ---
-    //                 const firstSendingId = selectedSendingInstitutions[0].id;
-    //                 console.log("Fetching receiving for single sender:", firstSendingId);
-    //                 const data = await fetchData(`receiving-institutions?sendingId=${firstSendingId}`);
-    //                 if (data && Object.keys(data).length > 0) {
-    //                     setAvailableReceivingInstitutions(data);
-    //                 } else {
-    //                     setError(`No receiving institutions found with agreements for ${selectedSendingInstitutions[0].name}.`);
-    //                 }
-    //             } else {
-    //                 // --- Fetch for multiple senders and find intersection ---
-    //                 console.log("Fetching receiving for multiple senders:", selectedSendingInstitutions.map(s => s.id));
-    //                 const promises = selectedSendingInstitutions.map(sender =>
-    //                     fetchData(`receiving-institutions?sendingId=${sender.id}`)
-    //                         .catch(err => {
-    //                             // Handle individual fetch errors gracefully, maybe return empty object
-    //                             console.error(`Failed to fetch receiving for ${sender.name} (${sender.id}):`, err);
-    //                             return {}; // Return empty object on error for this sender
-    //                         })
-    //                 );
-
-    //                 const results = await Promise.all(promises);
-    //                 console.log("Raw results from multiple fetches:", results);
-
-    //                 // Check if any fetch failed completely (returned null/undefined instead of {})
-    //                 if (results.some(res => res === null || typeof res === 'undefined')) {
-    //                      throw new Error("One or more requests for receiving institutions failed.");
-    //                 }
-
-    //                 // Calculate intersection based on IDs
-    //                 if (results.length > 0) {
-    //                     // Get IDs from the first result as the starting point
-    //                     let commonIds = new Set(Object.values(results[0]));
-
-    //                     // Intersect with IDs from subsequent results
-    //                     for (let i = 1; i < results.length; i++) {
-    //                         const currentIds = new Set(Object.values(results[i]));
-    //                         commonIds = new Set([...commonIds].filter(id => currentIds.has(id)));
-    //                     }
-
-    //                     console.log("Common receiving institution IDs:", commonIds);
-
-    //                     // Rebuild the availableReceivingInstitutions object using common IDs
-    //                     // We need a way to map IDs back to names. We can use the first result
-    //                     // (or any result that isn't empty) that contains the common IDs.
-    //                     const intersection = {};
-    //                     let nameMapSource = results.find(res => Object.keys(res).length > 0) || {};
-    //                     // Create a reverse map (id -> name) from a source result for efficiency
-    //                     const idToNameMap = Object.entries(nameMapSource).reduce((acc, [name, id]) => {
-    //                         acc[id] = name;
-    //                         return acc;
-    //                     }, {});
-
-
-    //                     commonIds.forEach(id => {
-    //                         // Find the name corresponding to the common ID
-    //                         const name = idToNameMap[id];
-    //                         if (name) { // Ensure we found a name
-    //                             intersection[name] = id;
-    //                         } else {
-    //                             console.warn(`Could not find name for common receiving ID: ${id}. This might happen if the ID exists in later results but not the first.`);
-    //                             // As a fallback, you could try searching other results, but this indicates potential data inconsistency.
-    //                         }
-    //                     });
-
-
-    //                     if (Object.keys(intersection).length > 0) {
-    //                         setAvailableReceivingInstitutions(intersection);
-    //                         console.log("Intersection result:", intersection);
-    //                     } else {
-    //                         setError("No common receiving institutions found for the selected sending institutions.");
-    //                     }
-    //                 } else {
-    //                     // Should not happen if selectedSendingInstitutions.length > 1, but handle defensively
-    //                 }
-    //             }
-    //         } catch (err) {
-    //             console.error("Error processing receiving institutions:", err);
-    //             setError(`Failed to load or process receiving institutions: ${err.message}`);
-    //         }
-    //     };
-
-    //     fetchAndIntersectReceiving();
-
-    // }, [selectedSendingInstitutions]); // Re-run when the list of selected senders changes
-
-    // --- Effects for Filtering Dropdowns ---
+    
     const filter = useCallback(
         ((value, data, setFiltered, setShowDropdown, excludeIds = []) => {
             const lowerCaseValue = value.toLowerCase();
@@ -236,13 +116,11 @@ const CollegeTransferForm = () => {
         []
     );
 
-    // Modified useEffect for sending dropdown
     useEffect(() => {
         const alreadySelectedIds = selectedSendingInstitutions.map(inst => inst.id);
         if (sendingInputValue) {
             filter(sendingInputValue, institutions, setFilteredSending, setShowSendingDropdown, alreadySelectedIds);
         } else {
-            // Show all available (not already selected) options on focus/empty
             const allAvailable = Object.entries(institutions)
                 .filter(([, id]) => !alreadySelectedIds.includes(id))
                 .map(([name, id]) => ({ name, id }));
@@ -251,12 +129,11 @@ const CollegeTransferForm = () => {
                 setShowSendingDropdown(false);
             }
         }
-    }, [sendingInputValue, institutions, selectedSendingInstitutions, filter]); // Add selectedSendingInstitutions
+    }, [sendingInputValue, institutions, selectedSendingInstitutions, filter]); 
 
-    // --- MODIFIED useEffect for receiving dropdown filtering ---
     useEffect(() => {
         const sourceData = availableReceivingInstitutions;
-        const excludeIds = []; // No need to exclude senders here
+        const excludeIds = []; 
 
         if (receivingInputValue) {
             filter(receivingInputValue, sourceData, setFilteredReceiving, setShowReceivingDropdown, excludeIds);
@@ -268,12 +145,9 @@ const CollegeTransferForm = () => {
                  setShowReceivingDropdown(false);
              }
         }
-    // Depend on the potentially updated availableReceivingInstitutions
     }, [receivingInputValue, availableReceivingInstitutions, filter]);
 
-    // --- MODIFIED useEffect for year dropdown filtering ---
     useEffect(() => {
-        // Only filter if year input is enabled
         const isYearInputEnabled = selectedSendingInstitutions.length > 0 && selectedReceivingId;
         if (yearInputValue && isYearInputEnabled) {
             filter(yearInputValue, academicYears, setFilteredYears, setShowYearDropdown);
@@ -281,36 +155,29 @@ const CollegeTransferForm = () => {
              if (!document.activeElement || document.activeElement.id !== 'academicYears') {
                  setShowYearDropdown(false);
              }
-             // Only set filtered years if input is enabled, otherwise keep it empty
              setFilteredYears(isYearInputEnabled ? Object.entries(academicYears).map(([name, id]) => ({ name, id })).reverse() : []);
         }
-    }, [yearInputValue, academicYears, filter, selectedSendingInstitutions, selectedReceivingId]); // Add dependencies
+    }, [yearInputValue, academicYears, filter, selectedSendingInstitutions, selectedReceivingId]); 
 
-    // --- Event Handlers ---
     const handleInputChange = (e, setInputValue) => {
         setInputValue(e.target.value);
         setError(null);
     };
 
-    // Modified handleDropdownSelect
     const handleDropdownSelect = (item, inputId) => {
         setError(null);
         switch (inputId) {
             case 'sending':
-                // Add to the array, clear input
                 setSelectedSendingInstitutions(prev => [...prev, item]);
-                setSendingInputValue(''); // Clear input after selection
+                setSendingInputValue(''); 
                 setShowSendingDropdown(false);
                 setFilteredSending([]);
                 break;
             case 'receiving':
-                // Set single receiving ID and value
                 setReceivingInputValue(item.name);
                 setSelectedReceivingId(item.id);
-                // Clear year selection if receiving institution changes
                 setYearInputValue('');
                 setSelectedYearId(null);
-                // Also clear existing academic years data as it's now invalid
                 setShowReceivingDropdown(false);
                 setFilteredReceiving([]);
                 break;
@@ -325,12 +192,10 @@ const CollegeTransferForm = () => {
         }
     };
 
-    // NEW: Handler to remove a selected sending institution
     const handleRemoveSending = (idToRemove) => {
         setSelectedSendingInstitutions(prev => prev.filter(inst => inst.id !== idToRemove));
     };
 
-    // Modified handleViewMajors
     const handleViewMajors = () => {
         if (selectedSendingInstitutions.length === 0) {
             setError("Please select at least one sending institution.");
@@ -341,27 +206,22 @@ const CollegeTransferForm = () => {
             return;
         }
         setError(null);
-        // Use the FIRST selected sending institution for the initial URL path
         const firstSendingId = selectedSendingInstitutions[0].id;
 
-        // Navigate, passing the full list of selected sending institutions in state
         navigate(`/agreement/${firstSendingId}/${selectedReceivingId}/${selectedYearId}`, {
             state: {
-                // Pass the full array of selected sending institutions objects
                 allSelectedSendingInstitutions: selectedSendingInstitutions
             }
         });
     };
 
-    // --- Render Dropdown ---
     const renderDropdown = (items, show, inputId) => {
-        // Ensure items is an array before mapping
         if (!show || !Array.isArray(items) || items.length === 0) return null;
         return (
             <div className="dropdown">
                 {items.map((item) => (
                     <div
-                        key={`${inputId}-${item.id}-${item.name}`} // Ensure unique key
+                        key={`${inputId}-${item.id}-${item.name}`} 
                         className="dropdown-item"
                         onMouseDown={() => handleDropdownSelect(item, inputId)}
                     >
@@ -372,17 +232,14 @@ const CollegeTransferForm = () => {
         );
     };
 
-    // --- Component JSX ---
     return (
         <div style={{ maxWidth: "960px"}}>
             <h1>College Transfer AI</h1>
             {combinedError && <div style={{ color: 'red', marginBottom: '1em' }}>Error: {combinedError}</div>}
 
-            {/* Sending Institution Section */}
             <div className="form-group">
                 <label htmlFor="searchInstitution">Sending Institution(s):</label>
 
-                {/* Display Selected Institutions as Tags */}
                 <div style={{ marginBottom: selectedSendingInstitutions.length > 0 ? '0.5em' : '0', display: 'flex', flexWrap: 'wrap', gap: '0.5em' }}>
                     {selectedSendingInstitutions.map(inst => (
                         <span key={inst.id} className="tag" style={{ display: 'inline-flex', alignItems: 'center', background: '#e0e0e0', padding: '3px 8px', borderRadius: '12px', fontSize: '0.9em' }}>
@@ -398,10 +255,9 @@ const CollegeTransferForm = () => {
                     ))}
                 </div>
 
-                {/* Input for adding next sending institution */}
                 <input
                     type="text"
-                    id="searchInstitution" // Keep ID for focus logic if needed
+                    id="searchInstitution" 
                     placeholder="Type to search and add..."
                     value={sendingInputValue}
                     onChange={(e) => handleInputChange(e, setSendingInputValue)}
@@ -419,13 +275,11 @@ const CollegeTransferForm = () => {
                 {renderDropdown(filteredSending, showSendingDropdown, 'sending')}
             </div>
 
-            {/* Receiving Institution Section (Single Selection) */}
             <div className="form-group">
                 <label htmlFor="receivingInstitution">Receiving Institution:</label>
                 <input
                     type="text"
                     id="receivingInstitution"
-                    // Update placeholder based on loading state and availability
                     placeholder={
                         isLoadingReceiving ? "Loading common institutions..." :
                         selectedSendingInstitutions.length === 0 ? "Select sending institution(s) first..." :
@@ -435,7 +289,6 @@ const CollegeTransferForm = () => {
                     value={receivingInputValue}
                     onChange={(e) => handleInputChange(e, setReceivingInputValue)}
                     onFocus={() => {
-                        // Populate dropdown from 'availableReceivingInstitutions' on focus
                         if (!isLoadingReceiving && selectedSendingInstitutions.length > 0) {
                             const sourceData = availableReceivingInstitutions;
                             const allAvailable = Object.entries(sourceData)
@@ -445,15 +298,12 @@ const CollegeTransferForm = () => {
                         }
                     }}
                     onBlur={() => setShowReceivingDropdown(false)}
-                    // Disable if loading, no senders selected, or (after loading) no common institutions available
                     disabled={isLoadingReceiving || selectedSendingInstitutions.length === 0 || (!isLoadingReceiving && Object.keys(availableReceivingInstitutions).length === 0)}
                     autoComplete="off"
                 />
-                {/* Uses 'filteredReceiving' for display */}
                 {renderDropdown(filteredReceiving, showReceivingDropdown, 'receiving')}
             </div>
 
-            {/* Academic Year */}
             <div className="form-group">
                 <label htmlFor="academicYear">Academic Year:</label>
                 <input
@@ -469,29 +319,24 @@ const CollegeTransferForm = () => {
                     value={yearInputValue}
                     onChange={(e) => handleInputChange(e, setYearInputValue)}
                     onFocus={() => {
-                        // Only show dropdown if input is enabled and not loading
                         if (!isLoadingYears && selectedSendingInstitutions.length > 0 && selectedReceivingId) {
                             const allOptions = Object.entries(academicYears)
                                 .map(([name, id]) => ({ name, id }))
-                                .sort((a, b) => b.name.localeCompare(a.name)); // Sort descending
+                                .sort((a, b) => b.name.localeCompare(a.name)); 
                             setFilteredYears(allOptions);
                             setShowYearDropdown(true);
                         }
                     }}
                     onBlur={() => setShowYearDropdown(false)}
-                    // Disable if loading years, or sending/receiving not selected, or (after loading) no years available
                     disabled={isLoadingYears || selectedSendingInstitutions.length === 0 || !selectedReceivingId || (!isLoadingYears && Object.keys(academicYears).length === 0)}
                     autoComplete="off"
                 />
-                {/* Render dropdown only if input is enabled and not loading */}
                 {(!isLoadingYears && selectedSendingInstitutions.length > 0 && selectedReceivingId) &&
                     renderDropdown(filteredYears, showYearDropdown, 'year')}
             </div>
 
-            {/* MODIFIED: Button - Adjust disabled logic */}
             <button
                 onClick={handleViewMajors}
-                // Disable if loading anything, or basic selections missing
                 disabled={isLoadingYears || isLoadingReceiving || selectedSendingInstitutions.length === 0 || !selectedReceivingId || !selectedYearId || isLoading}
                 title={
                     isLoadingYears ? "Loading common academic years..." :
