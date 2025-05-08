@@ -9,3 +9,4 @@ PyMuPDF
 openai
 dotenv
 google-generativeai
+stripe
